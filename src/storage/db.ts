@@ -3,15 +3,17 @@
  *
  * ストア
  * - games        : 対局1件 = seed＋全行動（MahjongGame.replay で完全に再現できる）＋結果・集計
- * - evaluations  : 自分の打牌1件 = 打牌直前の局面スナップショット＋実際の打牌＋評価結果（仕様 §3-4）
+ * - evaluations  : 自分の判断1件 = 判断直前の局面スナップショット＋実際の行動＋評価結果（仕様 §3-4）
+ * - reviews      : 復習問題1件 = どの判断を、次にいつ出題するか（仕様 §7-3）
  *
  * 保存に失敗しても（プライベートブラウズなど）対局は続けられるよう、呼び出し側は例外を握りつぶしてよい。
  */
+import type { ReviewItem } from '../engine/coach/review'
 import type { EvaluationRecord } from '../engine/evaluator/types'
 import type { Action, GameResult } from '../engine/game/types'
 
 export const DB_NAME = 'mahjong-analyst'
-export const DB_VERSION = 1
+export const DB_VERSION = 2
 
 export interface StoredSettings {
   length: 'tonpuu' | 'hanchan'
@@ -69,6 +71,11 @@ export function openDb(): Promise<IDBDatabase> {
         const evals = db.createObjectStore('evaluations', { keyPath: ['gameId', 'decisionId'] })
         evals.createIndex('gameId', 'gameId')
       }
+      // v2：復習問題
+      if (!db.objectStoreNames.contains('reviews')) {
+        const reviews = db.createObjectStore('reviews', { keyPath: ['gameId', 'decisionId'] })
+        reviews.createIndex('dueAt', 'dueAt')
+      }
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
@@ -92,7 +99,7 @@ function request<T>(req: IDBRequest<T>): Promise<T> {
   })
 }
 
-async function store(name: 'games' | 'evaluations', mode: IDBTransactionMode): Promise<IDBObjectStore> {
+async function store(name: 'games' | 'evaluations' | 'reviews', mode: IDBTransactionMode): Promise<IDBObjectStore> {
   const db = await openDb()
   return db.transaction(name, mode).objectStore(name)
 }
@@ -125,4 +132,29 @@ export async function listEvaluations(gameId: string): Promise<StoredEvaluation[
   const s = await store('evaluations', 'readonly')
   const all = await request(s.index('gameId').getAll(gameId))
   return (all as StoredEvaluation[]).sort((a, b) => a.decisionId - b.decisionId)
+}
+
+/** 全ての判断の評価（弱点分析用） */
+export async function listAllEvaluations(): Promise<StoredEvaluation[]> {
+  return (await request((await store('evaluations', 'readonly')).getAll())) as StoredEvaluation[]
+}
+
+export async function getEvaluation(gameId: string, decisionId: number): Promise<StoredEvaluation | undefined> {
+  return request((await store('evaluations', 'readonly')).get([gameId, decisionId]))
+}
+
+export async function listReviews(): Promise<ReviewItem[]> {
+  return (await request((await store('reviews', 'readonly')).getAll())) as ReviewItem[]
+}
+
+export async function saveReviews(items: ReviewItem[]): Promise<void> {
+  if (items.length === 0) return
+  const db = await openDb()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('reviews', 'readwrite')
+    const s = tx.objectStore('reviews')
+    for (const item of items) s.put(item)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
 }

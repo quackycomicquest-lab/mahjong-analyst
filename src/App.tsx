@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { DEFAULT_OPPONENTS } from './engine/ai/profile'
 import { latestUnfinishedGame, listEvaluations, type GameRecord } from './storage/db'
+import { AnalysisScreen, type ReviewRequest } from './ui/AnalysisScreen'
 import { GameScreen } from './ui/GameScreen'
 import { HistoryScreen } from './ui/HistoryScreen'
+import { ReviewScreen } from './ui/ReviewScreen'
 import { useGame, type GameSettings } from './ui/useGame'
 
 const STORAGE_KEY = 'mahjong-analyst:settings'
@@ -19,7 +21,8 @@ function loadSettings(): GameSettings {
 
 export default function App() {
   const [settings, setSettings] = useState<GameSettings>(loadSettings)
-  const [screen, setScreen] = useState<'title' | 'game' | 'history'>('title')
+  const [screen, setScreen] = useState<'title' | 'game' | 'history' | 'analysis' | 'review'>('title')
+  const [reviewRequest, setReviewRequest] = useState<ReviewRequest>({ mode: 'due' })
   const [unfinished, setUnfinished] = useState<GameRecord | null>(null)
   const handle = useGame(settings)
 
@@ -50,6 +53,18 @@ export default function App() {
 
   if (screen === 'game' && handle.game) return <GameScreen handle={handle} onQuit={() => setScreen('title')} />
   if (screen === 'history') return <HistoryScreen onBack={() => setScreen('title')} onResume={resume} />
+  if (screen === 'analysis') {
+    return (
+      <AnalysisScreen
+        onBack={() => setScreen('title')}
+        onReview={(r) => {
+          setReviewRequest(r)
+          setScreen('review')
+        }}
+      />
+    )
+  }
+  if (screen === 'review') return <ReviewScreen request={reviewRequest} onExit={() => setScreen('analysis')} />
 
   return (
     <div className="title">
@@ -130,6 +145,9 @@ export default function App() {
             続きから（{unfinished.roundLabel}・{unfinished.settings.length === 'tonpuu' ? '東風戦' : '東南戦'}）
           </button>
         )}
+        <button type="button" className="btn btn--plain btn--large" onClick={() => setScreen('analysis')}>
+          弱点分析・復習問題
+        </button>
         <button type="button" className="btn btn--plain btn--large" onClick={() => setScreen('history')}>
           対局履歴・振り返り
         </button>
