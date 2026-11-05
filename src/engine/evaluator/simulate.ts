@@ -11,6 +11,9 @@
  *
  * 自分の打ち方（シミュレーション内の方針）:
  * - 有効牌を引いたら向聴数が最も進む打牌、引かなければツモ切り
+ * - 他家の捨て牌は、向聴数が進み、役（役牌・断幺九・混一色）の見込みがあれば鳴く
+ *   （役牌のポン以外は鳴いた後が2向聴以内のとき。チーは上家の捨て牌だけ。立直中・脅威があって遠いときは鳴かない）
+ *   鳴いたらすぐ打牌し、間の打ち手を飛ばして手番が進む
  * - 脅威（立直・2副露以上）があり2向聴以上なら、最も安全な牌を切って降りる
  * - 門前で聴牌したら立直（立直後はツモ切り）。ただし打牌時点で聴牌の候補は、その候補の立直・ダマのまま進める
  */
@@ -51,6 +54,8 @@ export interface SimSetup {
   /** 場の供託・本場 */
   kyoutaku: number
   honba: number
+  /** シミュレーション内で鳴くか（検証で鳴きの効果を切り分けるときは false） */
+  allowCalls?: boolean
 }
 
 export interface SimCandidate {
@@ -100,9 +105,10 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
   let winSum = 0
   let winValueSum = 0
   let dealInSum = 0
-  const melds = cand.melds ?? setup.melds
-  const menzen = cand.menzen ?? setup.menzen
-  const meldCount = melds.length
+  const initialMelds = cand.melds ?? setup.melds
+  const initialMenzen = cand.menzen ?? setup.menzen
+  const allowCalls = setup.allowCalls !== false
+  const yakuhai = new Set<TileKind>([31, 32, 33, seatWindOf(setup.view), setup.view.round.wind])
   const need = setup.ownTurns * 4
 
   for (let i = 0; i < n; i++) {
@@ -118,6 +124,11 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
     }
 
     const c = cand.counts.slice()
+    // 鳴きで変わる副露の状態（試行ごとに初期化）
+    let melds = initialMelds
+    let meldCount = melds.length
+    let menzen = initialMenzen
+    const meldKinds: TileKind[][] = melds.map((m) => m.tiles.map((t) => t.kind))
     let shanten = fastShanten(c, meldCount)
     // 最初から聴牌している候補は「立直するか」をこの打牌で決めているので、途中で立直しない
     const decidedAtStart = shanten === 0
@@ -142,6 +153,63 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
     }
     if (cand.kind !== null) discardRisk(cand.kind)
 
+    /** 他家の捨て牌 x を鳴くか判断し、鳴いたら打牌まで済ませて true */
+    const tryCall = (x: TileKind, canChi: boolean, t: number): boolean => {
+      if (!allowCalls || riichi || meldCount >= 4 || shanten <= 0) return false
+      const options: { remove: [TileKind, TileKind]; type: 'pon' | 'chi' }[] = []
+      if (c[x] >= 2) options.push({ remove: [x, x], type: 'pon' })
+      if (canChi && x < 27) {
+        const r = x % 9
+        if (r >= 2 && c[x - 2] > 0 && c[x - 1] > 0) options.push({ remove: [x - 2, x - 1], type: 'chi' })
+        if (r >= 1 && r <= 7 && c[x - 1] > 0 && c[x + 1] > 0) options.push({ remove: [x - 1, x + 1], type: 'chi' })
+        if (r <= 6 && c[x + 1] > 0 && c[x + 2] > 0) options.push({ remove: [x + 1, x + 2], type: 'chi' })
+      }
+      let best: { opt: (typeof options)[number]; s: number; d: TileKind } | null = null
+      for (const opt of options) {
+        c[opt.remove[0]]--
+        c[opt.remove[1]]--
+        let sBest = 99
+        let dBest = -1
+        for (let d = 0; d < KIND_COUNT; d++) {
+          if (c[d] === 0 || d === x) continue // 喰い替え（同じ牌）は不可
+          c[d]--
+          const sh = fastShanten(c, meldCount + 1)
+          c[d]++
+          if (sh < sBest || (sh === sBest && setup.dealInProb[d] < setup.dealInProb[dBest])) {
+            sBest = sh
+            dBest = d
+          }
+        }
+        const ok =
+          dBest >= 0 &&
+          sBest < shanten &&
+          (!best || sBest < best.s) &&
+          openYakuPossible(c, meldKinds, [opt.remove[0], opt.remove[1], x], opt.type, yakuhai)
+        c[opt.remove[0]]++
+        c[opt.remove[1]]++
+        if (ok) best = { opt, s: sBest, d: dBest }
+      }
+      if (!best) return false
+      const yakuhaiPon = best.opt.type === 'pon' && yakuhai.has(x)
+      if (!yakuhaiPon && best.s > 2) return false
+      if (setup.hasThreat && best.s >= 2) return false
+
+      // 鳴く：副露を加え、門前でなくなり、すぐ打牌する
+      const kinds = [best.opt.remove[0], best.opt.remove[1], x].sort((a, b) => a - b)
+      c[best.opt.remove[0]]--
+      c[best.opt.remove[1]]--
+      const id0 = 2000 + meldKinds.length * 4
+      melds = [...melds, { type: best.opt.type, tiles: kinds.map((k, i) => ({ id: id0 + i, kind: k, red: false })) }]
+      meldKinds.push(kinds)
+      meldCount++
+      menzen = false
+      c[best.d]--
+      furiten.add(best.d)
+      shanten = best.s
+      discardRisk(best.d, setup.futureDealIn[t] ?? 0)
+      return true
+    }
+
     let won = 0 // 和了した確率
     let wonPoints = 0 // Σ 和了確率 × 点
     let wonAfterRiichi = 0
@@ -151,24 +219,34 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
       // 他家3人の打牌（ロンの機会）。他家は当たり牌をいつも切るわけではないので、
       // 当たり牌が出る割合を掛ける（立直していれば他家は警戒してさらに出にくい）
       const others = t === 0 && cand.drawFirst ? 0 : 3
+      let called = false
       for (let j = 0; j < others && idx < m; j++) {
         alive *= 1 - (riichi ? setup.otherEndHazardSelfRiichi[t] : setup.otherEndHazard[t])
         const tile = pool[idx++]
-        if (shanten !== 0) continue
-        c[tile]++
-        if (fastShanten(c, meldCount) === -1 && !isFuriten(c, tile, furiten, meldCount)) {
-          const v = winValue(setup, cand, melds, menzen, c, tile, false, riichi)
-          if (v > 0) {
-            const p = alive * (riichi ? RON_RATE_RIICHI : RON_RATE_DAMA)
-            outcome += p * v
-            won += p
-            wonPoints += p * v
-            if (riichi) wonAfterRiichi += p
-            alive -= p
+        // 聴牌していればロンの機会
+        if (shanten === 0) {
+          c[tile]++
+          if (fastShanten(c, meldCount) === -1 && !isFuriten(c, tile, furiten, meldCount)) {
+            const v = winValue(setup, cand, melds, menzen, c, tile, false, riichi)
+            if (v > 0) {
+              const p = alive * (riichi ? RON_RATE_RIICHI : RON_RATE_DAMA)
+              outcome += p * v
+              won += p
+              wonPoints += p * v
+              if (riichi) wonAfterRiichi += p
+              alive -= p
+            }
           }
+          c[tile]--
         }
-        c[tile]--
+        // 鳴き（チーは上家＝この直前の打ち手 j=2 の捨て牌だけ）。鳴いたら間の打ち手は飛ばし、自分のツモもない。
+        // 他家は欲しい牌を一様には切らないので、ロンと同じ割合で機会を間引く（候補間で同じ判定になるよう、試行番号と山の位置で決める）
+        if (callChance(i, idx) < RON_RATE_DAMA && tryCall(tile, j === 2, t)) {
+          called = true
+          break
+        }
       }
+      if (called) continue
       if (idx >= m) break
       // 自分のツモ
       const draw = pool[idx++]
@@ -254,6 +332,14 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
   }
 }
 
+/** 試行番号と山の位置から決まる 0〜1 の値（候補が違っても同じ） */
+function callChance(trial: number, pos: number): number {
+  let h = Math.imul(trial + 1, 0x9e3779b1) ^ Math.imul(pos + 1, 0x85ebca6b)
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d)
+  h ^= h >>> 12
+  return (h >>> 0) / 4294967296
+}
+
 function isFuriten(c14: number[], winTile: TileKind, furiten: Set<TileKind>, meldCount: number): boolean {
   if (furiten.has(winTile)) return true
   c14[winTile]--
@@ -298,4 +384,38 @@ function winValue(
   const p = v.payment
   const gain = (tsumo ? p.total : p.main + p.mainBonus) * (riichi && menzen ? RIICHI_BONUS_RATE : 1)
   return Math.round(gain) + setup.kyoutaku * 1000
+}
+
+/**
+ * 鳴いた後に役を作れる見込みがあるか（役牌・断幺九・混一色）。
+ * @param c 鳴きに使う牌を抜いた後の手牌
+ */
+function openYakuPossible(
+  c: number[],
+  meldKinds: TileKind[][],
+  newMeld: TileKind[],
+  type: 'pon' | 'chi',
+  yakuhai: Set<TileKind>,
+): boolean {
+  const allMelds = [...meldKinds, newMeld]
+  // 役牌：鳴く刻子・既にある副露・手の中の暗刻
+  if (type === 'pon' && yakuhai.has(newMeld[2])) return true
+  if (meldKinds.some((m) => m[0] === m[1] && yakuhai.has(m[0]))) return true
+  for (const k of yakuhai) if (c[k] >= 3) return true
+  // 断幺九：副露に么九牌がなく、手の么九牌が1枚以下
+  const isYaochu = (k: TileKind) => k >= 27 || k % 9 === 0 || k % 9 === 8
+  if (allMelds.every((m) => m.every((k) => !isYaochu(k)))) {
+    let yaochu = 0
+    for (let k = 0; k < KIND_COUNT; k++) if (c[k] > 0 && isYaochu(k)) yaochu += c[k]
+    if (yaochu <= 1) return true
+  }
+  // 混一色・清一色：数牌が1色（他の色が手に1枚以下）で、副露もその色か字牌
+  const suitCount = [0, 0, 0]
+  for (let k = 0; k < 27; k++) suitCount[Math.floor(k / 9)] += c[k]
+  for (const m of allMelds) if (m[0] < 27) suitCount[Math.floor(m[0] / 9)] += 3
+  const main = suitCount.indexOf(Math.max(...suitCount))
+  const meldsOk = allMelds.every((m) => m[0] >= 27 || Math.floor(m[0] / 9) === main)
+  let off = 0
+  for (let k = 0; k < 27; k++) if (Math.floor(k / 9) !== main) off += c[k]
+  return meldsOk && off <= 1
 }
