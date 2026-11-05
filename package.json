@@ -1,0 +1,36 @@
+{
+  "name": "mahjong-analyst",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "golden:shanten": "uv run --with mahjong==2.1.0 python3 -I tools/gen_shanten_golden.py src/engine/rules/__fixtures__/shanten-golden.json",
+    "golden:score": "uv run --with mahjong==2.1.0 python3 -I tools/gen_score_golden.py src/engine/rules/__fixtures__/score-golden.json",
+    "bench": "tsx bench/shanten.bench.ts",
+    "league": "tsx bench/ai-league.ts",
+    "eval-demo": "tsx bench/eval-demo.ts",
+    "eval-timing": "tsx bench/eval-timing.ts"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "fake-indexeddb": "^6.2.7",
+    "oxlint": "^1.90.0",
+    "tsx": "^4.23.15",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6",
+    "vitest": "^4.1.12"
+  }
+}

@@ -1,0 +1,89 @@
+/**
+ * 対局画面（仕様 §2-2, §8-2）
+ * Mac：横長の卓＋右側に評価パネル ／ iPhone：縦長の卓＋下部に折りたためる評価パネル
+ */
+import { useState } from 'react'
+import { Board } from './Board'
+import { Controls } from './Controls'
+import { Tile } from './Tile'
+import { EvaluationPanel } from './EvaluationPanel'
+import { GameResultModal, RoundResultModal } from './ResultModal'
+import { roundLabel } from './labels'
+import type { useGame } from './useGame'
+
+type GameHandle = ReturnType<typeof useGame>
+
+export function GameScreen({ handle, onQuit }: { handle: GameHandle; onQuit: () => void }) {
+  const { game, view, players, evals, act, start, saveError } = handle
+  // iPhone の下部パネル：開いた場面（uiKey）の間だけ開く。自分が判断する場面になったら自動で閉じて手牌を見せる
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
+  if (!game || !view) return null
+  const ph = game.phase
+  const activeSeat = ph.type === 'turn' ? ph.seat : ph.type === 'response' ? ph.actor : null
+  const r = view.round
+  // 自分が判断する場面ごとに操作部品を作り直す（AIの行動では作り直さない）
+  const uiKey =
+    ph.type === 'turn' && ph.seat === 0
+      ? `turn-${view.roundIndex}-${view.hand.length}-${view.drawn?.id ?? 'call'}`
+      : ph.type === 'response'
+        ? `resp-${view.roundIndex}-${ph.tile.id}`
+        : `idle-${view.roundIndex}`
+
+  return (
+    <div className="game">
+      <header className="topbar">
+        <span className="topbar__brand">MAHJONG ANALYST</span>
+        <span className="topbar__round">{roundLabel(r.wind, r.dealer, r.honba)}</span>
+        {/* iPhone では卓の中央が狭いので、局の情報をここに出す */}
+        <span className="topbar__info">
+          供託{r.kyoutaku}・残{view.wallRemaining}
+          <span className="topbar__dora" aria-label="ドラ表示牌">
+            {view.doraIndicators.map((k, i) => (
+              <Tile key={i} tile={{ id: -1 - i, kind: k, red: false }} size="mini" />
+            ))}
+          </span>
+        </span>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => {
+            if (window.confirm('対局をやめてタイトルに戻りますか？')) onQuit()
+          }}
+        >
+          終了
+        </button>
+      </header>
+
+      {saveError && (
+        <div className="save-error" role="status">
+          {saveError}（対局は続けられます）
+        </div>
+      )}
+      <main className="table-area">
+        <Board view={view} players={players} activeSeat={activeSeat} />
+        <Controls key={uiKey} view={view} players={players} activeSeat={activeSeat} onAct={act} />
+      </main>
+
+      <aside className="side">
+        <EvaluationPanel
+          evals={evals}
+          players={players}
+          collapsed={expandedKey !== uiKey}
+          onToggle={() => setExpandedKey(expandedKey === uiKey ? null : uiKey)}
+        />
+      </aside>
+
+      {ph.type === 'roundEnd' && (
+        <RoundResultModal
+          result={ph.result}
+          players={players}
+          willEnd={ph.next === null}
+          onNext={() => act({ type: 'nextRound' })}
+        />
+      )}
+      {ph.type === 'gameEnd' && (
+        <GameResultModal result={ph.result} players={players} evals={evals} onRestart={start} onTitle={onQuit} />
+      )}
+    </div>
+  )
+}

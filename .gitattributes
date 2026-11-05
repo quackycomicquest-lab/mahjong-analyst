@@ -1,0 +1,2 @@
+# 生成した正解データ（tools/ のスクリプトで再生成）。差分表示を省略する
+src/engine/rules/__fixtures__/*.json linguist-generated=true -diff

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#14482f"/>
+  <circle cx="256" cy="256" r="230" fill="#1b5a3d"/>
+  <rect x="166" y="112" width="180" height="246" rx="26" fill="#c9c0a6"/>
+  <rect x="166" y="104" width="180" height="240" rx="26" fill="#fbf8ef"/>
+  <text x="256" y="276" font-size="150" text-anchor="middle" fill="#c62828" font-family="Hiragino Mincho ProN, serif" font-weight="700">中</text>
+  <text x="256" y="420" font-size="44" text-anchor="middle" fill="#e3b54f" font-family="Helvetica, Arial, sans-serif" font-weight="800" letter-spacing="4">ANALYST</text>
+</svg>
