@@ -38,6 +38,10 @@ npm run dev
 | `src/ui/` `src/workers/` | 対局画面・評価パネル・履歴・評価 Web Worker | 下記 |
 | `src/storage/` | 対局と打牌評価の保存（IndexedDB） | [storage-and-pwa.md](docs/storage-and-pwa.md) |
 
+## 素材
+
+- 牌画像：`public/tiles/`（利用規約を確認した配布素材の 66×90 立体版。`m1`〜`m9`・`p1`〜`p9`・`s1`〜`s9`・`z1`〜`z7`（東南西北白發中）、赤5は `m0`・`p0`・`s0`）。原本は `asset/`（git 管理外）
+
 ## 対局画面の操作
 
 - **Mac**：牌をクリックで打牌。←→ で牌を選び Enter で打牌、Esc で立直の取り消し／鳴きのスキップ。評価パネルは右側。

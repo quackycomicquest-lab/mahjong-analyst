@@ -1,12 +1,19 @@
 /**
- * 牌の表示（画像を使わず文字で描く。白い牌・高い視認性：仕様 §8-1）
+ * 牌の表示（仕様 §8-1：白い牌・高い視認性）
+ *
+ * 表向きの牌は public/tiles/ の画像（m1〜m9・p1〜p9・s1〜s9・z1〜z7、赤5は m0・p0・s0）。
+ * z1〜z7 はアプリの字牌の並び（東南西北白發中）。裏向きの牌は CSS で描く。
  */
 import { kindName, rankOf, suitOf, type PhysicalTile } from '../engine/rules/tile'
 
-const KANJI_NUM = ['一', '二', '三', '四', '五', '六', '七', '八', '九']
-const HONORS = ['東', '南', '西', '北', '白', '發', '中']
-
 export type TileSize = 'hand' | 'river' | 'meld' | 'mini'
+
+/** 牌画像のパス（公開先のサブパスにも対応） */
+function tileImageUrl(tile: PhysicalTile): string {
+  const suit = suitOf(tile.kind)
+  const rank = tile.red ? 0 : rankOf(tile.kind)
+  return `${import.meta.env.BASE_URL}tiles/${suit}${rank}.png`
+}
 
 interface Props {
   tile: PhysicalTile | null // null は裏向き
@@ -26,11 +33,7 @@ export function Tile({ tile, size = 'hand', selected, disabled, highlight, sidew
   const cls = [
     'tile',
     `tile--${size}`,
-    tile ? `tile--${suitOf(tile.kind)}` : 'tile--back',
-    tile?.red ? 'tile--red' : '',
-    tile && tile.kind === 31 ? 'tile--haku' : '',
-    tile && tile.kind === 32 ? 'tile--hatsu' : '',
-    tile && tile.kind === 33 ? 'tile--chun' : '',
+    tile ? 'tile--face' : 'tile--back',
     selected ? 'is-selected' : '',
     disabled ? 'is-disabled' : '',
     highlight ? 'is-highlight' : '',
@@ -42,7 +45,7 @@ export function Tile({ tile, size = 'hand', selected, disabled, highlight, sidew
     .join(' ')
 
   const label = tile ? (tile.red ? '赤' : '') + kindName(tile.kind) : '裏向きの牌'
-  const content = tile ? <Face tile={tile} /> : null
+  const content = tile ? <img className="tile__img" src={tileImageUrl(tile)} alt="" draggable={false} /> : null
   if (onClick) {
     return (
       <button
@@ -62,21 +65,5 @@ export function Tile({ tile, size = 'hand', selected, disabled, highlight, sidew
     <span className={cls} role="img" aria-label={label}>
       {content}
     </span>
-  )
-}
-
-function Face({ tile }: { tile: PhysicalTile }) {
-  const suit = suitOf(tile.kind)
-  const rank = rankOf(tile.kind)
-  if (suit === 'z') {
-    return <span className="tile__honor">{tile.kind === 31 ? '' : HONORS[rank - 1]}</span>
-  }
-  const top = suit === 'm' ? KANJI_NUM[rank - 1] : String(rank)
-  const bottom = suit === 'm' ? '萬' : suit === 'p' ? '筒' : '索'
-  return (
-    <>
-      <span className="tile__num">{top}</span>
-      <span className="tile__suit">{bottom}</span>
-    </>
   )
 }
