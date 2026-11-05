@@ -49,4 +49,6 @@ npm run dev
 
 ## オフライン・iPhone
 
-`npm run build` で作った `dist/` を配信すると、一度開いた後はオフラインでも対局と評価ができる（PWA）。iPhone のホーム画面に入れてオフラインで使うには HTTPS での配信が必要。詳しくは [storage-and-pwa.md](docs/storage-and-pwa.md)。
+公開URL：**https://quackycomicquest-lab.github.io/mahjong-analyst/**（`main` に push すると GitHub Actions がテスト・ビルドして自動で公開）
+
+iPhone の Safari で開き、共有 →「ホーム画面に追加」で、オフラインでも対局と評価ができるアプリとして使える（PWA）。詳しくは [storage-and-pwa.md](docs/storage-and-pwa.md)。

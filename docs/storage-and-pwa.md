@@ -29,8 +29,24 @@
 
 確認済み：本番ビルドを配信 → 一度開く → サーバーを止める → 再読み込みしても起動し、対局・打牌評価まで動く（Mac のブラウザ）。
 
-## iPhone で使うには
+## 公開と iPhone での使い方
 
-Service Worker（オフライン動作）は **HTTPS で配信したページ**でしか動かない（`localhost` は例外）。Mac の開発サーバーに iPhone から `http://192.168.x.x:5173` でつなぐと対局はできるが、オフラインにはならない。
+公開先：**https://quackycomicquest-lab.github.io/mahjong-analyst/**（GitHub Pages）
 
-iPhone のホーム画面に入れてオフラインで使うには、`npm run build` で作った `dist/` を HTTPS の静的ホスティング（GitHub Pages、Cloudflare Pages、Netlify など）に置き、Safari で開いて「共有 → ホーム画面に追加」する。
+- `main` ブランチに push すると、GitHub Actions（`.github/workflows/deploy.yml`）がテスト → ビルド（`BASE_PATH=/mahjong-analyst/`）→ 公開まで自動で行う。テストが失敗したら公開されない。
+- 公開URLは知っている人なら誰でも開けるが、対局データは各端末の IndexedDB にだけ保存され、サーバーには送られない。
+
+iPhone のホーム画面に追加する手順：
+
+1. iPhone の Safari で公開URLを開く（一度開くとオフライン用のキャッシュが作られる）
+2. 共有ボタン →「ホーム画面に追加」
+3. ホーム画面のアイコン（麻雀分析）から起動すると、全画面のアプリとして動き、機内モードでも対局と評価ができる
+
+注意：Service Worker（オフライン動作）は HTTPS のページでしか動かない（`localhost` は例外）。Mac の開発サーバーに iPhone から `http://192.168.x.x:5173` でつなぐと対局はできるが、オフラインにはならない。
+
+ローカルで公開時と同じ形を確かめるには：
+
+```bash
+BASE_PATH=/mahjong-analyst/ npm run build
+npx vite preview --base /mahjong-analyst/
+```

@@ -11,9 +11,13 @@ import { defineConfig, type Plugin } from 'vite'
  * Service Worker（dist/sw.js）を生成する。ファイル構成が変わるとキャッシュ名も変わり、古いキャッシュは消える。
  */
 function serviceWorker(): Plugin {
+  let base = '/'
   return {
     name: 'mahjong-analyst-service-worker',
     apply: 'build',
+    configResolved(config) {
+      base = config.base
+    },
     generateBundle(_options, bundle) {
       const publicDir = join(__dirname, 'public')
       const walk = (dir: string): string[] =>
@@ -23,7 +27,7 @@ function serviceWorker(): Plugin {
         })
       const files = [...Object.keys(bundle), ...walk(publicDir)]
         .filter((f) => !f.endsWith('.map') && f !== 'sw.js')
-        .map((f) => '/' + f.split('\\').join('/'))
+        .map((f) => base + f.split('\\').join('/'))
         .sort()
       const hash = createHash('sha256')
       for (const f of files) hash.update(f)
@@ -32,16 +36,17 @@ function serviceWorker(): Plugin {
       }
       for (const f of walk(publicDir)) hash.update(readFileSync(join(publicDir, f)))
       // Service Worker 自体を書き換えたときもキャッシュを作り直す
-      hash.update(serviceWorkerSource('', []))
+      hash.update(serviceWorkerSource('', base, []))
       const version = hash.digest('hex').slice(0, 12)
-      this.emitFile({ type: 'asset', fileName: 'sw.js', source: serviceWorkerSource(version, ['/', ...files]) })
+      this.emitFile({ type: 'asset', fileName: 'sw.js', source: serviceWorkerSource(version, base, [base, ...files]) })
     },
   }
 }
 
-function serviceWorkerSource(version: string, precache: string[]): string {
+function serviceWorkerSource(version: string, base: string, precache: string[]): string {
   return `// 自動生成（vite.config.ts）。編集しないこと。
 const CACHE = 'mahjong-analyst-${version}'
+const BASE = ${JSON.stringify(base)}
 const PRECACHE = ${JSON.stringify(precache)}
 
 self.addEventListener('install', (event) => {
@@ -66,10 +71,10 @@ self.addEventListener('fetch', (event) => {
       fetch(req)
         .then((res) => {
           const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put('/', copy))
+          caches.open(CACHE).then((c) => c.put(BASE, copy))
           return res
         })
-        .catch(() => caches.match('/', { ignoreVary: true })),
+        .catch(() => caches.match(BASE, { ignoreVary: true })),
     )
     return
   }
@@ -94,6 +99,8 @@ self.addEventListener('fetch', (event) => {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // 公開先のサブパス（GitHub Pages では /mahjong-analyst/）。ローカルでは '/'
+  base: process.env.BASE_PATH ?? '/',
   plugins: [react(), serviceWorker()],
   worker: { format: 'es' },
 })
