@@ -67,6 +67,7 @@ export function makeView(spec: ViewSpec): PlayerView {
     drawn: spec.response ? null : hand[hand.length - 1],
     players,
     lastDiscard,
+    responseTo: lastDiscard ? { ...lastDiscard, kind: "discard" as const } : null,
     isFuriten: false,
     legalActions,
   }

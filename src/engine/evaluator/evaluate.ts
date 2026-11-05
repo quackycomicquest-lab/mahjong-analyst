@@ -1,38 +1,80 @@
 /**
- * 打牌評価エンジン（仕様 §3, §4-1 ③ Mahjong Evaluator）
+ * 判断評価エンジン（仕様 §3, §4-1 ③ Mahjong Evaluator）
  *
- * 打牌確定時点の局面スナップショット（PlayerView）と実際の打牌を受け取り、
- * 全候補を同じ局面・同じ乱数列で比較して評価する。
+ * 判断直前の局面スナップショット（PlayerView）と実際の行動を受け取り、
+ * その場で選べた全ての行動を同じ局面・同じ乱数列で比較して評価する。
  *
- * - 評価点（100点満点）は「最善候補との期待値差（判断損失）」から相対的に変換する。
- *   誤差の範囲内の差は減点しない。
+ * 評価できる判断
+ * - 打牌（立直・ダマの選択を含む）
+ * - 鳴き：ポン・チー・大明槓・スキップ（鳴いた場合は、鳴いた後の打牌まで含めて最善のものを比べる）
+ * - 和了：ロン・ツモ（見逃して続けた場合と比べる）
+ * - カン：暗槓・加槓（カンしない打牌と比べる）
+ * - 九種九牌（流局させない打牌と比べる）
+ *
+ * - 評価点（100点満点）は「最善候補との期待値差（判断損失）」から相対的に変換する。誤差の範囲の差は減点しない。
  * - 判断損失は評価点とは別に保持する。
- * - 危険度は経験則による推定なので、脅威がある局面の評価は「暫定」とする。
+ * - 危険度など推定に近似を含む局面は「暫定」とする。
  */
 
 import { findThreats, seenCounts, tileDanger } from '../ai/danger'
-import type { Action, Seat } from '../game/types'
+import { dealInLoss as dealInLossFor, futureDealIn, otherEndHazard } from '../calibration/calibration'
+import { chiForbidden } from '../game/game'
+import type { Action, CalledMeld, Seat } from '../game/types'
 import type { PlayerView } from '../game/view'
 import { ukeire as calcUkeire } from '../rules/efficiency'
-import { countsOfTiles, kindName, KIND_COUNT, type TileKind } from '../rules/tile'
-import { simulateCandidate, type SimCandidate, type SimOutcome, type SimSetup } from './simulate'
+import { calculateHandValue } from '../rules/score'
+import { calculateShanten } from '../rules/shanten'
+import { countsOfTiles, kindName, KIND_COUNT, type PhysicalTile, type TileKind } from '../rules/tile'
+import type { Meld } from '../rules/types'
+import { simulateCandidate, type SimCandidate, type SimSetup } from './simulate'
 import {
   EVALUATOR_VERSION,
   SIMULATIONS,
   type CandidateEvaluation,
+  type DecisionType,
   type Evaluation,
   type EvaluatorOptions,
 } from './types'
 
 /**
  * 判断損失（点）を評価点に変換する尺度の範囲。
- * 尺度 = 最善候補と候補全体の中央値との期待値差（この局面で判断がどれだけ点数を左右するか）。
+ * 打牌：最善候補と候補全体の中央値との期待値差（この局面で判断がどれだけ点数を左右するか）。
+ * 鳴き・和了など候補が少ない判断：最善の期待値の大きさも考慮する。
  * 損失が尺度と同じとき約37点、尺度の半分で約61点。
  */
 const SCALE_MIN = 120
 const SCALE_MAX = 1000
+/** 鳴いた後の打牌は、向聴数・受け入れの上位この数だけシミュレーションする */
+const CALL_DISCARD_VARIANTS = 3
 
-type DiscardAction = Extract<Action, { type: 'discard' }>
+type Group = 'discard' | 'pass' | 'call' | 'win' | 'kan' | 'kyuushu'
+
+interface Variant {
+  sim: SimCandidate
+  /** 受け入れ計算用：この候補の後の手牌（3n+1枚）と副露数 */
+  counts: number[]
+  meldCount: number
+  kind: TileKind | null
+  label: string
+}
+
+interface CandSpec {
+  key: string
+  group: Group
+  action: Action
+  riichi: boolean
+  /** 確定している収支（和了・九種九牌） */
+  fixed?: { ev: number; label: string; winValue: number }
+  variants?: Variant[]
+}
+
+interface Result {
+  key: string
+  group: Group
+  ev: CandidateEvaluation
+  outcomes: Float64Array
+  mean: number
+}
 
 export function evaluateDecision(
   view: PlayerView,
@@ -42,8 +84,10 @@ export function evaluateDecision(
   const t0 = now()
   const mode = options.mode
   const simulations = options.simulations ?? SIMULATIONS[mode]
+  const decision = decisionTypeOf(action)
   const base: Omit<Evaluation, 'elapsedMs'> = {
     decisionId: view.decisionId,
+    decision: decision ?? 'discard',
     seat: view.seat,
     engineVersion: EVALUATOR_VERSION,
     mode,
@@ -58,89 +102,84 @@ export function evaluateDecision(
     confidence: 0,
     good: [],
     improve: [],
-    analysis: { threats: [], stance: null, safest: null, rankExpectation: null },
+    analysis: { threats: [], stance: null, safest: null, rankExpectation: null, riichi: null },
     candidates: [],
   }
-  if (action.type !== 'discard') {
-    return { ...base, statusReason: '打牌以外の行動は評価対象外です', elapsedMs: now() - t0 }
-  }
+  if (!decision) return { ...base, statusReason: 'この行動は評価対象外です', elapsedMs: now() - t0 }
 
   const setup = buildSetup(view)
-  const discards = view.legalActions.filter((a): a is DiscardAction => a.type === 'discard')
-  const cands = uniqueCandidates(view, discards)
   const seen = seenCounts(view)
-  const counts14 = countsOfTiles(view.hand)
-  const meldCount = setup.melds.length
   const seed = options.seed ?? view.decisionId * 2654435761
+  const specs = view.responseTo ? responseCandidates(view, setup) : turnCandidates(view, setup)
+  const results = specs.map((s) => runSpec(s, setup, seen, simulations, seed))
+  results.sort((a, b) => b.mean - a.mean)
 
-  const results: { ev: CandidateEvaluation; sim: SimOutcome; key: string }[] = cands.map((c) => {
-    const counts = counts14.slice()
-    counts[c.kind]--
-    const visible = seen.map((n, k) => n - counts14[k])
-    const u = calcUkeire(counts, meldCount, visible)
-    const sim = simulateCandidate(setup, { ...c.sim, counts }, simulations, seed)
-    return {
-      key: c.key,
-      sim,
-      ev: {
-        action: c.action,
-        kind: c.kind,
-        riichi: c.riichi,
-        label: c.label,
-        shanten: u.shanten,
-        ukeire: u.total,
-        effectiveKinds: u.tiles.map((t) => t.kind),
-        winRate: sim.winRate,
-        winValue: Math.round(sim.winValue),
-        immediateDealIn: setup.dealInProb[c.kind],
-        dealInRate: sim.dealInRate,
-        ev: Math.round(sim.mean),
-        evStdError: Math.round(sim.stdError),
-      },
-    }
-  })
-  results.sort((a, b) => b.ev.ev - a.ev.ev)
-
-  const chosenKey = candidateKey(view, action)
+  const chosenKey = actionKey(view, action)
   const chosen = results.find((r) => r.key === chosenKey)
   if (!chosen) {
-    return { ...base, statusReason: '選んだ打牌が合法手の中に見つかりません', elapsedMs: now() - t0 }
+    return { ...base, statusReason: '選んだ行動が合法手の中に見つかりません', elapsedMs: now() - t0 }
   }
-  // 最善候補：期待値が最も高い候補と「誤差の範囲で同等」な候補の中から、
-  // 向聴数が小さく受け入れが多いものを選ぶ（シミュレーションのばらつきで形の悪い手を最善と示さない）
+
+  // 最善候補：期待値が最も高い候補と「誤差の範囲で同等」な候補のうち、
+  // 打牌同士なら向聴数が小さく受け入れが多いもの（シミュレーションのばらつきで形の悪い手を最善と示さない）
   const top = results[0]
-  const nearTop = results.filter((r) => top.sim.mean - r.sim.mean <= pairedStdError(top.sim.outcomes, r.sim.outcomes))
-  const best = nearTop.reduce((a, b) =>
-    b.ev.shanten < a.ev.shanten || (b.ev.shanten === a.ev.shanten && b.ev.ukeire > a.ev.ukeire) ? b : a,
-  )
-  const diffSE = pairedStdError(best.sim.outcomes, chosen.sim.outcomes)
-  const loss = Math.max(0, best.sim.mean - chosen.sim.mean)
+  const nearTop = results.filter((r) => top.mean - r.mean <= pairedStdError(top.outcomes, r.outcomes))
+  const best =
+    top.group === 'discard'
+      ? nearTop
+          .filter((r) => r.group === 'discard')
+          .reduce((a, b) =>
+            b.ev.shanten < a.ev.shanten || (b.ev.shanten === a.ev.shanten && b.ev.ukeire > a.ev.ukeire) ? b : a,
+          )
+      : top
+  const diffSE = pairedStdError(best.outcomes, chosen.outcomes)
+  const loss = Math.max(0, best.mean - chosen.mean)
   const adjusted = Math.max(0, loss - diffSE)
-  const evs = results.map((r) => r.sim.mean).sort((x, y) => x - y)
+  const evs = results.map((r) => r.mean).sort((x, y) => x - y)
   const median = evs[Math.floor(evs.length / 2)]
-  const scale = clamp(best.sim.mean - median, SCALE_MIN, SCALE_MAX)
+  const stake = decision === 'discard' ? best.mean - median : Math.max(best.mean - median, Math.abs(best.mean) * 0.5, 300)
+  const scale = clamp(stake, SCALE_MIN, SCALE_MAX)
   const score = chosen === best ? 100 : Math.round(100 * Math.exp(-adjusted / scale))
   const confidence = clamp(1 - diffSE / (300 + loss), 0.1, 0.99) * (mode === 'light' ? 0.9 : 1)
 
   const threats = findThreats(view)
-  const safest = threats.length
-    ? results.reduce((a, b) => (b.ev.immediateDealIn < a.ev.immediateDealIn ? b : a)).ev
-    : null
+  const withTile = results.filter((r) => r.ev.kind !== null)
+  const safest =
+    threats.length && withTile.length
+      ? withTile.reduce((a, b) => (b.ev.immediateDealIn < a.ev.immediateDealIn ? b : a)).ev
+      : null
   const minShanten = Math.min(...results.map((r) => r.ev.shanten))
   const stance =
-    threats.length === 0 ? null : best.ev.immediateDealIn <= safest!.immediateDealIn + 1e-9 && best.ev.shanten > minShanten ? 'fold' : 'push'
+    threats.length === 0 || !safest
+      ? null
+      : best.ev.immediateDealIn <= safest.immediateDealIn + 1e-9 && best.ev.shanten > minShanten
+        ? 'fold'
+        : 'push'
 
   let status: Evaluation['status'] = 'ok'
   let statusReason = '牌効率と和了期待値のシミュレーションによる評価です'
   if (threats.length > 0) {
     status = 'provisional'
-    statusReason = '放銃リスクは経験則（現物・スジ・壁など）による推定のため暫定評価です'
+    statusReason = '放銃リスクは牌の分類ごとの実測放銃率による推定のため暫定評価です'
+  } else if (decision === 'kan') {
+    status = 'provisional'
+    statusReason = 'カンで増える新ドラはまだ考慮していないため暫定評価です'
   } else if (diffSE > 300) {
     status = 'provisional'
     statusReason = `試行回数が少なく誤差が大きいため暫定評価です（誤差 ±${Math.round(diffSE)}点）`
   }
 
-  const { good, improve } = comment(chosen.ev, best.ev, results.map((r) => r.ev), safest, loss, diffSE)
+  const riichi = riichiAnalysis(chosen, results)
+  const { good, improve } =
+    decision === 'discard'
+      ? comment(chosen.ev, best.ev, results.map((r) => r.ev), safest, loss, diffSE)
+      : commentOther(chosen, best, loss, diffSE)
+  if (riichi && riichi.recommended === riichi.chosen && riichi.riichiEv !== riichi.damaEv) {
+    good.push(
+      `立直判断は適切です（${riichi.tile}切りで 立直 ${riichi.riichiEv}点／ダマ ${riichi.damaEv}点）`,
+    )
+  }
+
   return {
     ...base,
     status,
@@ -158,9 +197,313 @@ export function evaluateDecision(
       stance,
       safest,
       rankExpectation: null,
+      riichi,
     },
     candidates: results.map((r) => r.ev),
     elapsedMs: Math.round(now() - t0),
+  }
+}
+
+function decisionTypeOf(a: Action): DecisionType | null {
+  switch (a.type) {
+    case 'discard':
+      return 'discard'
+    case 'pass':
+    case 'pon':
+    case 'chi':
+    case 'daiminkan':
+      return 'call'
+    case 'ron':
+    case 'tsumo':
+      return 'win'
+    case 'ankan':
+    case 'kakan':
+      return 'kan'
+    case 'kyuushu':
+      return 'kyuushu'
+    default:
+      return null
+  }
+}
+
+/** 同じ意味の行動を同じキーにする（打牌は種類・赤・立直有無でまとめる） */
+function actionKey(view: PlayerView, a: Action): string {
+  switch (a.type) {
+    case 'discard': {
+      const t = view.hand.find((h) => h.id === a.tileId)!
+      return `d:${t.kind}:${t.red ? 'r' : ''}:${a.riichi ? 'R' : ''}`
+    }
+    case 'pon':
+    case 'chi': {
+      const tiles = a.tileIds.map((id) => view.hand.find((h) => h.id === id)!)
+      return `${a.type}:${tiles.map((t) => `${t.kind}${t.red ? 'r' : ''}`).sort().join(',')}`
+    }
+    case 'ankan':
+      return `ankan:${a.kind}`
+    case 'kakan':
+      return `kakan:${view.hand.find((h) => h.id === a.tileId)!.kind}`
+    default:
+      return a.type
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 候補の列挙
+
+function turnCandidates(view: PlayerView, setup: SimSetup): CandSpec[] {
+  const me = view.players[view.seat]
+  const counts14 = countsOfTiles(view.hand)
+  const reds = (exclude: number[]) => view.hand.filter((h) => h.red && !exclude.includes(h.id)).map((h) => h.kind)
+  const specs: CandSpec[] = []
+  const seenKeys = new Set<string>()
+
+  for (const a of view.legalActions) {
+    const key = actionKey(view, a)
+    if (seenKeys.has(key)) continue
+    seenKeys.add(key)
+    if (a.type === 'discard') {
+      const t = view.hand.find((h) => h.id === a.tileId)!
+      const counts = counts14.slice()
+      counts[t.kind]--
+      const riichi = !!a.riichi || me.riichi
+      specs.push({
+        key,
+        group: 'discard',
+        action: a,
+        riichi: !!a.riichi,
+        variants: [
+          {
+            sim: { kind: t.kind, riichi, counts, redKinds: reds([t.id]) },
+            counts,
+            meldCount: setup.melds.length,
+            kind: t.kind,
+            label: `${t.red ? '赤' : ''}${kindName(t.kind)}${a.riichi ? '（立直）' : ''}`,
+          },
+        ],
+      })
+    } else if (a.type === 'tsumo' && view.drawn) {
+      const v = winPoints(view, [...view.hand], view.drawn, setup.melds, true)
+      specs.push({ key, group: 'win', action: a, riichi: false, fixed: { ev: v, label: `ツモ（${v}点）`, winValue: v } })
+    } else if (a.type === 'kyuushu') {
+      specs.push({ key, group: 'kyuushu', action: a, riichi: false, fixed: { ev: 0, label: '九種九牌（流局）', winValue: 0 } })
+    } else if (a.type === 'ankan' || a.type === 'kakan') {
+      const kind = a.type === 'ankan' ? a.kind : view.hand.find((h) => h.id === a.tileId)!.kind
+      const used = view.hand.filter((h) => h.kind === kind).slice(0, a.type === 'ankan' ? 4 : 1)
+      const counts = counts14.slice()
+      counts[kind] -= used.length
+      const melds: Meld[] =
+        a.type === 'ankan'
+          ? [...setup.melds, { type: 'ankan', tiles: used }]
+          : setup.melds.map((m) =>
+              m.type === 'pon' && m.tiles[0].kind === kind ? { ...m, type: 'kakan' as const, tiles: [...m.tiles, used[0]] } : m,
+            )
+      specs.push({
+        key,
+        group: 'kan',
+        action: a,
+        riichi: false,
+        variants: [
+          {
+            sim: {
+              kind: null,
+              riichi: me.riichi,
+              counts,
+              redKinds: reds(used.map((u) => u.id)),
+              melds,
+              drawFirst: true,
+            },
+            counts,
+            meldCount: melds.length,
+            kind: null,
+            label: `${a.type === 'ankan' ? '暗槓' : '加槓'}（${kindName(kind)}）`,
+          },
+        ],
+      })
+    }
+  }
+  return specs
+}
+
+function responseCandidates(view: PlayerView, setup: SimSetup): CandSpec[] {
+  const me = view.players[view.seat]
+  const tile = view.responseTo!.tile
+  const from = view.responseTo!.seat
+  const counts13 = countsOfTiles(view.hand)
+  const canRon = view.legalActions.some((a) => a.type === 'ron')
+  const reds = (exclude: number[]) => view.hand.filter((h) => h.red && !exclude.includes(h.id)).map((h) => h.kind)
+  const specs: CandSpec[] = []
+  const seenKeys = new Set<string>()
+
+  for (const a of view.legalActions) {
+    const key = actionKey(view, a)
+    if (seenKeys.has(key)) continue
+    seenKeys.add(key)
+    if (a.type === 'pass') {
+      specs.push({
+        key,
+        group: 'pass',
+        action: a,
+        riichi: false,
+        variants: [
+          {
+            // 見逃した当たり牌は同巡内フリテン（簡略化してこの局の間フリテンとして扱う）
+            sim: { kind: null, riichi: me.riichi, counts: counts13, redKinds: reds([]), extraFuriten: canRon ? [tile.kind] : [] },
+            counts: counts13,
+            meldCount: setup.melds.length,
+            kind: null,
+            label: 'スキップ',
+          },
+        ],
+      })
+    } else if (a.type === 'ron') {
+      const v = winPoints(view, [...view.hand, tile], tile, setup.melds, false)
+      specs.push({ key, group: 'win', action: a, riichi: false, fixed: { ev: v, label: `ロン（${v}点）`, winValue: v } })
+    } else if (a.type === 'pon' || a.type === 'chi' || a.type === 'daiminkan') {
+      const own =
+        a.type === 'daiminkan'
+          ? view.hand.filter((h) => h.kind === tile.kind)
+          : a.tileIds.map((id) => view.hand.find((h) => h.id === id)!)
+      const ownIds = own.map((t) => t.id)
+      const rest = view.hand.filter((h) => !ownIds.includes(h.id))
+      const restCounts = countsOfTiles(rest)
+      const meld: CalledMeld = {
+        type: a.type === 'daiminkan' ? 'minkan' : a.type,
+        tiles: [...own, tile],
+        from,
+        calledTile: tile,
+      }
+      const melds: Meld[] = [...setup.melds, meld]
+      const name = `${a.type === 'pon' ? 'ポン' : a.type === 'chi' ? 'チー' : 'カン'}（${own.map(tileName).join('')}＋${tileName(tile)}）`
+      const redKinds = reds(ownIds) // 鳴いた牌の赤は副露側で数える
+      if (a.type === 'daiminkan') {
+        specs.push({
+          key,
+          group: 'call',
+          action: a,
+          riichi: false,
+          variants: [
+            {
+              sim: { kind: null, riichi: false, counts: restCounts, redKinds, melds, menzen: false, drawFirst: true },
+              counts: restCounts,
+              meldCount: melds.length,
+              kind: null,
+              label: name,
+            },
+          ],
+        })
+        continue
+      }
+      // 鳴いた後の打牌（喰い替えは不可）。向聴数・受け入れの上位だけシミュレーションする
+      const forbidden = a.type === 'pon' ? [tile.kind] : chiForbidden(tile.kind, own)
+      const options: { k: TileKind; sh: number; uk: number; counts: number[] }[] = []
+      for (let k = 0; k < KIND_COUNT; k++) {
+        if (restCounts[k] === 0 || forbidden.includes(k)) continue
+        const c = restCounts.slice()
+        c[k]--
+        const sh = calculateShanten(c, melds.length).shanten
+        options.push({ k, sh, uk: calcUkeire(c, melds.length).total, counts: c })
+      }
+      options.sort((x, y) => x.sh - y.sh || y.uk - x.uk)
+      specs.push({
+        key,
+        group: 'call',
+        action: a,
+        riichi: false,
+        variants: options.slice(0, CALL_DISCARD_VARIANTS).map((o) => ({
+          sim: { kind: o.k, riichi: false, counts: o.counts, redKinds, melds, menzen: false },
+          counts: o.counts,
+          meldCount: melds.length,
+          kind: o.k,
+          label: `${name} → ${kindName(o.k)}切り`,
+        })),
+      })
+    }
+  }
+  return specs
+}
+
+const tileName = (t: PhysicalTile) => (t.red ? '赤' : '') + kindName(t.kind)
+
+/** 和了点（放銃者の支払い／ツモの合計）＋供託 */
+function winPoints(view: PlayerView, hand: PhysicalTile[], winTile: PhysicalTile, melds: Meld[], tsumo: boolean): number {
+  const me = view.players[view.seat]
+  const v = calculateHandValue({
+    hand,
+    winTile,
+    melds,
+    isTsumo: tsumo,
+    riichi: me.riichi ? 'riichi' : 'none',
+    isHaitei: tsumo && view.wallRemaining === 0,
+    isHoutei: !tsumo && view.wallRemaining === 0 && view.responseTo?.kind === 'discard',
+    isChankan: !tsumo && view.responseTo?.kind !== 'discard',
+    seatWind: 27 + ((view.seat - view.round.dealer + 4) % 4),
+    roundWind: view.round.wind,
+    doraIndicators: view.doraIndicators,
+    honba: view.round.honba,
+  })
+  if (!v.ok) return 0
+  const p = v.payment
+  return (tsumo ? p.total : p.main + p.mainBonus) + view.round.kyoutaku * 1000
+}
+
+// ---------------------------------------------------------------------------
+// 候補の評価
+
+function runSpec(spec: CandSpec, setup: SimSetup, seen: number[], n: number, seed: number): Result {
+  if (spec.fixed) {
+    const outcomes = new Float64Array(n).fill(spec.fixed.ev)
+    return {
+      key: spec.key,
+      group: spec.group,
+      outcomes,
+      mean: spec.fixed.ev,
+      ev: {
+        action: spec.action,
+        kind: null,
+        riichi: false,
+        label: spec.fixed.label,
+        shanten: spec.group === 'win' ? -1 : 0,
+        ukeire: 0,
+        effectiveKinds: [],
+        winRate: spec.group === 'win' ? 1 : 0,
+        winValue: spec.fixed.winValue,
+        immediateDealIn: 0,
+        dealInRate: 0,
+        ev: Math.round(spec.fixed.ev),
+        evStdError: 0,
+      },
+    }
+  }
+  // 複数の変種（鳴いた後の打牌など）は、期待値が最も高いものをこの候補の値とする
+  let bestVariant: { v: Variant; sim: ReturnType<typeof simulateCandidate> } | null = null
+  for (const v of spec.variants!) {
+    const sim = simulateCandidate(setup, v.sim, n, seed)
+    if (!bestVariant || sim.mean > bestVariant.sim.mean) bestVariant = { v, sim }
+  }
+  const { v, sim } = bestVariant!
+  const visible = seen.slice()
+  for (let k = 0; k < KIND_COUNT; k++) visible[k] -= v.counts[k] + (v.kind === k ? 1 : 0)
+  const u = calcUkeire(v.counts, v.meldCount, visible.map((x) => Math.max(0, x)))
+  return {
+    key: spec.key,
+    group: spec.group,
+    outcomes: sim.outcomes,
+    mean: sim.mean,
+    ev: {
+      action: spec.action,
+      kind: v.kind,
+      riichi: spec.riichi,
+      label: v.label,
+      shanten: u.shanten,
+      ukeire: u.total,
+      effectiveKinds: u.tiles.map((t) => t.kind),
+      winRate: sim.winRate,
+      winValue: Math.round(sim.winValue),
+      immediateDealIn: v.kind === null ? 0 : setup.dealInProb[v.kind],
+      dealInRate: sim.dealInRate,
+      ev: Math.round(sim.mean),
+      evStdError: Math.round(sim.stdError),
+    },
   }
 }
 
@@ -174,16 +517,14 @@ export function buildSetup(view: PlayerView): SimSetup {
   for (let k = 0; k < KIND_COUNT; k++) for (let j = seen[k]; j < 4; j++) pool.push(k)
 
   const threats = findThreats(view)
+  const riichiThreats = threats.filter((t) => t.riichi).length
+  const openThreats = threats.length - riichiThreats
   const dealInProb = new Float64Array(KIND_COUNT)
   const dealInLoss = new Float64Array(KIND_COUNT)
-  // 他家の打牌1回あたりに、他家同士の和了で局が終わる確率（流局率が実戦並みになる値）
-  let hazard = 0.03
   for (const t of threats) {
-    const dealer = t.seat === view.round.dealer
-    const loss = t.riichi ? (dealer ? 9600 : 6400) : dealer ? 5800 : 3900
-    hazard += t.riichi ? 0.025 : 0.024 * t.weight
+    const loss = dealInLossFor(t.type, t.seat === view.round.dealer)
     for (let k = 0; k < KIND_COUNT; k++) {
-      const p = (t.weight * tileDanger(k, t, seen, 3)) / 100
+      const p = tileDanger(k, t, seen, 3) / 100
       dealInLoss[k] = dealInProb[k] + p > 0 ? (dealInLoss[k] * dealInProb[k] + loss * p) / (dealInProb[k] + p) : 0
       dealInProb[k] += p
     }
@@ -198,47 +539,51 @@ export function buildSetup(view: PlayerView): SimSetup {
     ownTurns: Math.floor(view.wallRemaining / 4),
     dealInProb,
     dealInLoss,
-    otherEndHazard: hazard,
+    // 他家の打牌1回あたりに、自分以外の和了で局が終わる確率（山の残り枚数ごとの実測値）
+    otherEndHazard: hazardSeq(view.wallRemaining, riichiThreats, openThreats, false),
+    otherEndHazardSelfRiichi: hazardSeq(view.wallRemaining, riichiThreats, openThreats, true),
     hasThreat: threats.length > 0,
+    futureDealIn: futureDealInSeq(view.wallRemaining, threats.length > 0),
+    futureDealInLoss: futureDealIn(view.wallRemaining, threats.length > 0).loss,
     riverKinds: me.river.map((r) => r.tile.kind),
     kyoutaku: view.round.kyoutaku,
     honba: view.round.honba,
   }
 }
 
-interface Cand {
-  key: string
-  action: DiscardAction
-  kind: TileKind
-  riichi: boolean
-  label: string
-  sim: Omit<SimCandidate, 'counts'>
+function futureDealInSeq(wall: number, threatsVisible: boolean): Float64Array {
+  const turns = Math.floor(wall / 4) + 1
+  const seq = new Float64Array(turns)
+  // t 回目のツモ後の打牌は、山が 4(t+1) 枚ほど減った時点
+  for (let t = 0; t < turns; t++) seq[t] = futureDealIn(Math.max(0, wall - 4 * (t + 1)), threatsVisible).rate
+  return seq
 }
 
-function candidateKey(view: PlayerView, a: Action): string {
-  if (a.type !== 'discard') return ''
-  const t = view.hand.find((h) => h.id === a.tileId)!
-  return `${t.kind}:${t.red ? 'r' : ''}:${a.riichi ? 'R' : ''}`
+function hazardSeq(wall: number, riichiThreats: number, openThreats: number, selfRiichi: boolean): Float64Array {
+  const turns = Math.floor(wall / 4) + 1
+  const seq = new Float64Array(turns)
+  for (let t = 0; t < turns; t++) seq[t] = otherEndHazard(Math.max(0, wall - 4 * t), riichiThreats, openThreats, selfRiichi)
+  return seq
 }
 
-/** 同じ種類・同じ赤・同じ立直有無の打牌は1候補にまとめる */
-function uniqueCandidates(view: PlayerView, discards: DiscardAction[]): Cand[] {
-  const out = new Map<string, Cand>()
-  for (const a of discards) {
-    const key = candidateKey(view, a)
-    if (out.has(key)) continue
-    const t = view.hand.find((h) => h.id === a.tileId)!
-    const redKinds = view.hand.filter((h) => h.red && h.id !== t.id).map((h) => h.kind)
-    out.set(key, {
-      key,
-      action: a,
-      kind: t.kind,
-      riichi: !!a.riichi,
-      label: `${t.red ? '赤' : ''}${kindName(t.kind)}${a.riichi ? '（立直）' : ''}`,
-      sim: { kind: t.kind, riichi: !!a.riichi, redKinds },
-    })
+// ---------------------------------------------------------------------------
+// 立直判断
+
+function riichiAnalysis(chosen: Result, results: Result[]): Evaluation['analysis']['riichi'] {
+  if (chosen.group !== 'discard' || chosen.ev.kind === null) return null
+  const sameTile = results.filter((r) => r.group === 'discard' && r.ev.kind === chosen.ev.kind)
+  const r = sameTile.find((x) => x.ev.riichi)
+  const d = sameTile.find((x) => !x.ev.riichi)
+  if (!r || !d) return null
+  const diffSE = pairedStdError(r.outcomes, d.outcomes)
+  const recommended = r.mean - d.mean > diffSE ? 'riichi' : d.mean - r.mean > diffSE ? 'dama' : r.mean >= d.mean ? 'riichi' : 'dama'
+  return {
+    tile: kindName(chosen.ev.kind),
+    riichiEv: Math.round(r.mean),
+    damaEv: Math.round(d.mean),
+    recommended,
+    chosen: chosen.ev.riichi ? 'riichi' : 'dama',
   }
-  return [...out.values()]
 }
 
 // ---------------------------------------------------------------------------
@@ -286,6 +631,45 @@ function comment(
   }
   return { good, improve }
 }
+
+/** 鳴き・和了・カン・九種九牌の解説 */
+function commentOther(chosen: Result, best: Result, loss: number, diffSE: number): { good: string[]; improve: string[] } {
+  const good: string[] = []
+  const improve: string[] = []
+  const c = chosen.ev
+  const b = best.ev
+  const nearBest = chosen === best || loss <= diffSE
+  if (chosen === best) good.push('最善の判断を選べています')
+  else if (nearBest) good.push(`最善（${b.label}）との差は誤差の範囲です`)
+  if (nearBest) {
+    if (chosen.group === 'win') good.push('和了を逃さず取れています')
+    return { good, improve }
+  }
+
+  const lossText = `期待値が${Math.round(loss)}点高い`
+  if (best.group === 'win') {
+    improve.push(`${b.label}できる局面でした。見逃すより${lossText}選択です`)
+  } else if (best.group === 'pass' && chosen.group === 'call') {
+    improve.push(`鳴かない方が${lossText}局面です（鳴いた場合 和了率${pct(c.winRate)}・平均${c.winValue}点／鳴かない場合 ${pct(b.winRate)}・${b.winValue}点）`)
+  } else if (best.group === 'call' && chosen.group === 'pass') {
+    improve.push(`${b.label}の方が${lossText}局面です（向聴数 ${c.shanten}→${b.shanten}、和了率 ${pct(c.winRate)}→${pct(b.winRate)}）`)
+  } else if (best.group === 'call' && chosen.group === 'call') {
+    improve.push(`同じ鳴くなら${b.label}の方が${lossText}選択です`)
+  } else if (chosen.group === 'kan') {
+    improve.push(`カンせずに${b.label}とする方が${lossText}局面です`)
+  } else if (best.group === 'kan') {
+    improve.push(`${b.label}をする方が${lossText}局面です`)
+  } else if (chosen.group === 'kyuushu') {
+    improve.push(`流局させずに続ける（${b.label}）方が${lossText}局面です`)
+  } else if (best.group === 'kyuushu') {
+    improve.push(`九種九牌で流局させる方が${lossText}局面です`)
+  } else {
+    improve.push(`${b.label}の方が${lossText}選択でした`)
+  }
+  return { good, improve }
+}
+
+const pct = (x: number) => `${Math.round(x * 100)}%`
 
 // ---------------------------------------------------------------------------
 

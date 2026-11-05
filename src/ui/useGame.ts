@@ -2,7 +2,7 @@
  * 対局の進行管理（UI 用フック）
  *
  * - 席0が自分、席1〜3が AI。AI の手番・応答は少し間を置いて自動で進める。
- * - 自分が打牌したら、打牌直前の局面スナップショットを評価 Worker に送り、
+ * - 自分が判断（打牌・鳴き・スキップ・和了・カン）したら、直前の局面スナップショットを評価 Worker に送り、
  *   対局はそのまま進める（評価を待たない。仕様 §5-3）。
  * - 評価結果は局面ID（decisionId）と結び付けて保持する。
  * - 対局（seed＋全行動）と打牌評価は IndexedDB に自動保存し、途中からでも再開できる。
@@ -22,7 +22,7 @@ import {
   type StoredEvaluation,
   type StoredSettings,
 } from '../storage/db'
-import { roundLabel, tileLabel } from './labels'
+import { actionLabel, roundLabel } from './labels'
 import { defaultEvaluationMode, requestEvaluation } from './evaluatorClient'
 
 export const HUMAN: Seat = 0
@@ -164,15 +164,14 @@ export function useGame(prefs: GameSettings) {
     (action: Action) => {
       const g = game
       if (!g || !session) return
-      if (action.type === 'discard' && action.seat === HUMAN) {
-        // 打牌確定時点のスナップショット（仕様 §3-1）
+      if (action.type !== 'nextRound' && action.seat === HUMAN) {
+        // 判断確定時点のスナップショット（仕様 §3-1）。打牌だけでなく鳴き・スキップ・和了・カンも評価する
         const view = getPlayerView(g, HUMAN)
-        const tile = view.hand.find((t) => t.id === action.tileId)!
         const entry: EvalEntry = {
           decisionId: view.decisionId,
           roundIndex: view.roundIndex,
           roundLabel: roundLabel(view.round.wind, view.round.dealer, view.round.honba),
-          label: tileLabel(tile) + (action.riichi ? '（立直）' : ''),
+          label: actionLabel(view, action),
           evaluation: null,
           error: null,
         }

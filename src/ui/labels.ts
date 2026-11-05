@@ -1,7 +1,8 @@
 /**
  * 表示用の文言
  */
-import type { DrawReason, Seat } from '../engine/game/types'
+import type { Action, DrawReason, Seat } from '../engine/game/types'
+import type { PlayerView } from '../engine/game/view'
 import { kindName, type PhysicalTile, type TileKind } from '../engine/rules/tile'
 
 export const WIND_NAMES: Record<number, string> = { 27: '東', 28: '南', 29: '西', 30: '北' }
@@ -46,3 +47,41 @@ export function scoreGrade(score: number): { label: string; tone: 'great' | 'goo
 
 export const pct = (x: number) => `${(x * 100).toFixed(0)}%`
 export const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`)
+
+/** 評価履歴に表示する、判断の短い名前（例: 東、5萬（立直）、ポン 白、スキップ（3萬）） */
+export function actionLabel(view: PlayerView, a: Action): string {
+  const byId = (id: number) => view.hand.find((t) => t.id === id)!
+  const target = view.responseTo ? tileLabel(view.responseTo.tile) : ''
+  switch (a.type) {
+    case 'discard':
+      return tileLabel(byId(a.tileId)) + (a.riichi ? '（立直）' : '')
+    case 'pass':
+      return `スキップ（${target}）`
+    case 'pon':
+      return `ポン ${target}`
+    case 'chi':
+      return `チー ${target}`
+    case 'daiminkan':
+      return `カン ${target}`
+    case 'ron':
+      return `ロン ${target}`
+    case 'tsumo':
+      return 'ツモ'
+    case 'ankan':
+      return `暗槓 ${kindName(a.kind)}`
+    case 'kakan':
+      return `加槓 ${tileLabel(byId(a.tileId))}`
+    case 'kyuushu':
+      return '九種九牌'
+    default:
+      return ''
+  }
+}
+
+export const DECISION_NAMES = {
+  discard: '打牌',
+  call: '鳴き判断',
+  win: '和了判断',
+  kan: 'カン判断',
+  kyuushu: '九種九牌',
+} as const

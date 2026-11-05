@@ -59,8 +59,8 @@ describe('打牌評価', () => {
   })
 
   it('立直者に対して遠い手なら現物で降りるのが最善（暫定評価）', () => {
-    const view = makeView({ hand: '45m79m24p68p159s136z', rivers: { 2: ['2z', '5m*'] } })
-    const e = evaluateDecision(view, discard(view, '1z'), opts)
+    const view = makeView({ hand: '45m79m24p68p159s136z', rivers: { 2: ['2z', '5m*'] }, dora: '9p' })
+    const e = evaluateDecision(view, discard(view, '1s'), opts)
     expect(e.status).toBe('provisional')
     expect(e.best!.label).toBe('5萬')
     expect(e.best!.immediateDealIn).toBe(0)
@@ -126,5 +126,77 @@ describe('対局中の評価', () => {
     const avg = scores.reduce((a, b) => a + b, 0) / scores.length
     expect(scores.length).toBeGreaterThan(20)
     expect(avg).toBeGreaterThan(70)
+  })
+})
+
+describe('鳴き・和了・九種九牌・立直判断の評価', () => {
+  const ponOf = (tile: { kind: number }, hand: { id: number; kind: number }[]): Action[] => {
+    const same = hand.filter((t) => t.kind === tile.kind)
+    return [{ type: 'pon', seat: 0, tileIds: [same[0].id, same[1].id] }]
+  }
+
+  it('ロンを見逃すと大きく減点され、ロンは満点', () => {
+    // 123456789m 34p 55s で 2p ロン（平和・一気通貫）
+    const view = makeView({
+      hand: '123456789m34p55s',
+      response: { from: 3, tile: '2p', actions: () => [{ type: 'ron', seat: 0 }] },
+    })
+    const ron = evaluateDecision(view, { type: 'ron', seat: 0 }, opts)
+    expect(ron.decision).toBe('win')
+    expect(ron.score).toBe(100)
+    expect(ron.good.join()).toContain('和了')
+    const skip = evaluateDecision(view, { type: 'pass', seat: 0 }, opts)
+    expect(skip.best!.label).toMatch(/^ロン/)
+    expect(skip.score!).toBeLessThan(50)
+    expect(skip.improve.join()).toContain('見逃す')
+  })
+
+  it('門前で立直を狙える一向聴なら、役のなくなるチーより鳴かない方が良い（序盤）', () => {
+    // 13m 456p 789p 23s 99s 東：2萬をチーすると役なしの形式聴牌、鳴かなければ立直を狙える
+    const view = makeView({
+      hand: '13m456p789p23s99s1z',
+      wallRemaining: 50,
+      response: {
+        from: 3,
+        tile: '2m',
+        actions: (_t, hand) => {
+          const a = hand.find((t) => t.kind === 0)!
+          const b = hand.find((t) => t.kind === 2)!
+          return [{ type: 'chi', seat: 0, tileIds: [a.id, b.id] }]
+        },
+      },
+    })
+    const chi = view.legalActions.find((a) => a.type === 'chi')!
+    const e = evaluateDecision(view, chi, opts)
+    expect(e.decision).toBe('call')
+    expect(e.best!.label).toBe('スキップ')
+    expect(e.chosen!.label).toMatch(/^チー/)
+    expect(e.score!).toBeLessThan(100)
+  })
+
+  it('役牌の対子をポンする判断を評価できる（鳴いた後の打牌まで含めて比較）', () => {
+    const view = makeView({ hand: '55z234m57p13s689s9m', response: { from: 3, tile: '5z', actions: ponOf } })
+    const pon = view.legalActions.find((a) => a.type === 'pon')!
+    const e = evaluateDecision(view, pon, opts)
+    expect(e.status).not.toBe('unavailable')
+    const labels = e.candidates.map((c) => c.label)
+    expect(labels).toContain('スキップ')
+    expect(labels.some((l) => /^ポン（白白＋白） → .+切り$/.test(l))).toBe(true)
+  })
+
+  it('九種九牌も評価できる', () => {
+    const view = makeView({ hand: '19m19p19s1234z258m6z' })
+    view.legalActions = [...view.legalActions, { type: 'kyuushu', seat: 0 }]
+    const e = evaluateDecision(view, { type: 'kyuushu', seat: 0 }, opts)
+    expect(e.decision).toBe('kyuushu')
+    expect(e.score).not.toBeNull()
+    expect(e.candidates.some((c) => c.label === '九種九牌（流局）')).toBe(true)
+  })
+
+  it('立直判断の欄：同じ牌で立直とダマを比べる', () => {
+    const view = makeView({ hand: '123m456p999m23s55s1z', riichiAllowed: true })
+    const e = evaluateDecision(view, discard(view, '1z', true), opts)
+    expect(e.analysis.riichi).toMatchObject({ tile: '東', recommended: 'riichi', chosen: 'riichi' })
+    expect(e.good.join()).toContain('立直判断は適切')
   })
 })

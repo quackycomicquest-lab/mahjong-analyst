@@ -847,7 +847,7 @@ export function ranksOf(points: number[]): number[] {
 }
 
 /** チーの喰い替え禁止牌（現物と、両面で鳴いた場合の筋） */
-function chiForbidden(called: TileKind, own: PhysicalTile[]): TileKind[] {
+export function chiForbidden(called: TileKind, own: PhysicalTile[]): TileKind[] {
   const kinds = own.map((t) => t.kind).sort((a, b) => a - b)
   const out = [called]
   const rank = called % 9

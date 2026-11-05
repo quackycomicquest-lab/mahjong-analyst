@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import type { CandidateEvaluation, Evaluation } from '../engine/evaluator/types'
 import { kindName } from '../engine/rules/tile'
-import { pct, scoreGrade } from './labels'
+import { DECISION_NAMES, pct, scoreGrade } from './labels'
 import type { EvalEntry, PlayerInfo } from './useGame'
 
 interface Props {
@@ -22,7 +22,7 @@ export function EvaluationPanel({ evals, players, collapsed, onToggle }: Props) 
   const [pick, setPick] = useState<{ id: number; latestAtPick: number } | null>(null)
   const [level, setLevel] = useState<1 | 2 | 3>(1)
   const latest = evals[evals.length - 1]
-  // 過去の評価を選んでいても、新しい打牌をしたら最新の評価に戻る
+  // 過去の評価を選んでいても、新しい判断をしたら最新の評価に戻る
   const pickedId = pick && pick.latestAtPick === latest?.decisionId ? pick.id : null
   const entry = evals.find((e) => e.decisionId === pickedId) ?? latest
   const ev = entry?.evaluation ?? null
@@ -38,13 +38,13 @@ export function EvaluationPanel({ evals, players, collapsed, onToggle }: Props) 
       </button>
 
       <div className="eval__body">
-        {!entry && <p className="eval__empty">牌を切ると、その打牌の評価がここに表示されます。</p>}
+        {!entry && <p className="eval__empty">牌を切る・鳴く・見送るなどの判断をすると、その評価がここに表示されます。</p>}
         {entry && !ev && !entry.error && <p className="eval__pending">「{entry.label}」を評価しています…</p>}
         {entry?.error && <p className="eval__error">評価できませんでした：{entry.error}</p>}
         {ev && <EvaluationDetail ev={ev} label={entry.label} players={players} level={level} setLevel={setLevel} />}
 
         {evals.length > 1 && (
-          <div className="eval__history" aria-label="これまでの打牌">
+          <div className="eval__history" aria-label="これまでの判断">
             {evals
               .slice(-24)
               .reverse()
@@ -110,7 +110,10 @@ export function EvaluationDetail({
         </div>
         <div className="eval__headline">
           <div className={`grade tone--${g.tone}`}>{g.label}</div>
-          {ev.status === 'provisional' && <span className="badge">暫定評価</span>}
+          <div className="eval__badges">
+            <span className="badge badge--kind">{DECISION_NAMES[ev.decision ?? 'discard']}</span>
+            {ev.status === 'provisional' && <span className="badge">暫定評価</span>}
+          </div>
           <div className="eval__choice">
             あなた：<b>{label}</b>　最善：<b>{best.label}</b>
           </div>
@@ -120,6 +123,7 @@ export function EvaluationDetail({
           </div>
         </div>
       </div>
+      {ev.analysis.riichi && <RiichiLine r={ev.analysis.riichi} />}
       {ev.good.length > 0 && (
         <ul className="notes notes--good">
           {ev.good.map((t, i) => (
@@ -149,6 +153,22 @@ export function EvaluationDetail({
       <p className="eval__meta">
         {ev.statusReason}。{ev.mode === 'full' ? '高精度' : '軽量'}評価（候補ごと{ev.simulations}回試行・{ev.elapsedMs}ms）・信頼度 {pct(ev.confidence)}・{ev.engineVersion}
       </p>
+    </div>
+  )
+}
+
+function RiichiLine({ r }: { r: NonNullable<Evaluation['analysis']['riichi']> }) {
+  const ok = r.recommended === r.chosen
+  return (
+    <div className={`riichi-line ${ok ? 'is-ok' : 'is-ng'}`}>
+      <span className="riichi-line__title">立直判断</span>
+      <span>
+        立直 <b>{r.riichiEv}点</b> ／ ダマ <b>{r.damaEv}点</b>
+      </span>
+      <span>
+        おすすめ：{r.recommended === 'riichi' ? '立直' : 'ダマ'}
+        {ok ? '（一致）' : `（あなたは${r.chosen === 'riichi' ? '立直' : 'ダマ'}）`}
+      </span>
     </div>
   )
 }
@@ -188,7 +208,7 @@ function Level2({ chosen, best, candidates }: { chosen: CandidateEvaluation; bes
       <table className="candidates">
         <thead>
           <tr>
-            <th>打牌</th>
+            <th>候補</th>
             <th>期待値</th>
             <th>和了率</th>
             <th>放銃率</th>
@@ -228,11 +248,17 @@ function Level3({ ev, players }: { ev: Evaluation; players: PlayerInfo[] }) {
       <dt>安全牌の選択</dt>
       <dd>
         {a.safest
-          ? `最も安全なのは ${a.safest.label}（放銃率 ${pct(a.safest.immediateDealIn)}）。あなたの打牌は ${pct(ev.chosen!.immediateDealIn)}`
+          ? `最も安全なのは ${a.safest.label}（放銃率 ${pct(a.safest.immediateDealIn)}）。あなたの選択は ${pct(ev.chosen!.immediateDealIn)}`
           : '—'}
       </dd>
       <dt>順位期待値</dt>
       <dd className="muted">未対応（今後の版で追加）</dd>
+      <dt>立直判断</dt>
+      <dd>
+        {ev.analysis.riichi
+          ? `${ev.analysis.riichi.tile}切りで 立直 ${ev.analysis.riichi.riichiEv}点 ／ ダマ ${ev.analysis.riichi.damaEv}点（おすすめ：${ev.analysis.riichi.recommended === 'riichi' ? '立直' : 'ダマ'}）`
+          : '—（この判断では立直を選べませんでした）'}
+      </dd>
       <dt>局面全体の期待値</dt>
       <dd>
         最善 {ev.best!.ev}点 ／ あなた {ev.chosen!.ev}点

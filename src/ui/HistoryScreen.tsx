@@ -50,7 +50,7 @@ export function HistoryScreen({ onBack, onResume }: { onBack: () => void; onResu
                 </span>
                 <span className={`history-item__score ${avg != null ? `tone--${scoreGrade(avg).tone}` : ''}`}>
                   {avg != null ? `平均 ${avg.toFixed(1)}点` : '評価なし'}
-                  <span className="muted">（{g.summary.evaluated}打）</span>
+                  <span className="muted">（{g.summary.evaluated}判断）</span>
                 </span>
               </button>
             </li>
@@ -114,20 +114,20 @@ function GameReview({
           <p className="muted">中断中（{game.roundLabel}）</p>
         )}
         <p>
-          評価した打牌 {game.summary.evaluated}回 ／ 平均{' '}
+          評価した判断 {game.summary.evaluated}回 ／ 平均{' '}
           <b>{game.summary.averageScore != null ? `${game.summary.averageScore.toFixed(1)}点` : '—'}</b> ／ 判断損失の合計{' '}
           {game.summary.totalLoss.toLocaleString()}点
         </p>
         <label className="toggle">
           <input type="checkbox" checked={onlyMistakes} onChange={(e) => setOnlyMistakes(e.target.checked)} />
-          70点未満の打牌だけ表示
+          70点未満の判断だけ表示
         </label>
       </section>
 
       <div className="review">
         <div className="review__list">
           {records === null && <p className="muted">読み込み中…</p>}
-          {records && shown.length === 0 && <p className="muted">表示する打牌がありません。</p>}
+          {records && shown.length === 0 && <p className="muted">表示する判断がありません。</p>}
           {rounds.map((label) => (
             <section key={label} className="review__round">
               <h3>{label}</h3>
@@ -159,7 +159,7 @@ function GameReview({
               <EvaluationDetail ev={current.evaluation} label={current.label} players={players} level={level} setLevel={setLevel} />
             </>
           ) : (
-            <p className="muted">打牌を選ぶと、そのときの局面と評価が表示されます。</p>
+            <p className="muted">判断を選ぶと、そのときの局面と評価が表示されます。</p>
           )}
         </div>
       </div>
@@ -167,7 +167,7 @@ function GameReview({
   )
 }
 
-/** 評価した局面（打牌直前の手牌）。選んだ牌と最善の牌に印を付ける */
+/** 評価した局面（判断直前の手牌）。打牌なら選んだ牌と最善の牌に印を付ける */
 function Position({ record }: { record: StoredEvaluation }) {
   const v = record.snapshot
   const a = record.action
@@ -189,6 +189,12 @@ function Position({ record }: { record: StoredEvaluation }) {
             <Tile tile={t} size="meld" selected={t.id === chosenId} highlight={t.kind === bestKind && t.id !== chosenId} />
           </span>
         ))}
+        {v.responseTo && (
+          <span className="position__called">
+            <span className="muted">他家の打牌</span>
+            <Tile tile={v.responseTo.tile} size="meld" highlight />
+          </span>
+        )}
       </div>
       <p className="position__legend muted">黄色の枠：あなたの打牌 ／ 枠線：最善の打牌</p>
     </div>

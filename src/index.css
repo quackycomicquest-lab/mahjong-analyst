@@ -574,9 +574,11 @@ button {
 }
 .score {
   display: flex;
+  flex: none;
   align-items: baseline;
   gap: 2px;
   min-width: 96px;
+  white-space: nowrap;
 }
 .score__value {
   font-size: 2.6rem;
@@ -1150,4 +1152,43 @@ button {
     position: static;
     order: -1;
   }
+}
+
+/* ------------------------------------------------------------------ 判断の種類・立直判断 */
+
+.eval__badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.badge--kind {
+  border-color: var(--line);
+  color: var(--muted);
+}
+.riichi-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+.riichi-line.is-ok {
+  border-color: rgb(76 195 138 / 0.5);
+}
+.riichi-line.is-ng {
+  border-color: rgb(230 162 60 / 0.6);
+}
+.riichi-line__title {
+  font-weight: 800;
+  color: var(--accent);
+}
+.position__called {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  font-size: 0.8rem;
 }

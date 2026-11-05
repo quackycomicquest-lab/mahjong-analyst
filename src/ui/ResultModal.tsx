@@ -121,9 +121,9 @@ export function GameResultModal({
         </ol>
         {avg !== null && (
           <div className="report">
-            <h3>あなたの打牌の振り返り</h3>
+            <h3>あなたの判断の振り返り</h3>
             <p>
-              評価した打牌 {scored.length}回 ／ 平均 <b>{avg.toFixed(1)}点</b> ／ 判断損失の合計 {totalLoss.toLocaleString()}点
+              評価した判断 {scored.length}回 ／ 平均 <b>{avg.toFixed(1)}点</b> ／ 判断損失の合計 {totalLoss.toLocaleString()}点
               （好判断 {scored.filter((e) => e.evaluation!.score! >= 90).length}回・要復習{' '}
               {scored.filter((e) => e.evaluation!.score! < 50).length}回）
             </p>
@@ -131,7 +131,7 @@ export function GameResultModal({
               <ul className="report__worst">
                 {worst.map((e) => (
                   <li key={e.decisionId}>
-                    {e.label}切り：{e.evaluation!.score}点（最善は {e.evaluation!.best?.label}）— {e.evaluation!.improve[0] ?? ''}
+                    {e.evaluation!.decision === 'discard' || !e.evaluation!.decision ? `${e.label}切り` : e.label}：{e.evaluation!.score}点（最善は {e.evaluation!.best?.label}）— {e.evaluation!.improve[0] ?? ''}
                   </li>
                 ))}
               </ul>

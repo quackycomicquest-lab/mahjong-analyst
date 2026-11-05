@@ -35,6 +35,8 @@ export interface PlayerView {
   players: OpponentView[]
   /** 直前の打牌（応答待ちのとき） */
   lastDiscard: { seat: Seat; tile: PhysicalTile } | null
+  /** 応答を求められている牌（打牌・加槓・暗槓。槍槓の判断にも使う） */
+  responseTo: { seat: Seat; tile: PhysicalTile; kind: 'discard' | 'chankan' | 'ankanChankan' } | null
   isFuriten: boolean
   legalActions: Action[]
 }
@@ -61,6 +63,7 @@ export function getPlayerView(game: MahjongGame, seat: Seat): PlayerView {
       points: p.points,
     })),
     lastDiscard: ph.type === 'response' && ph.kind === 'discard' ? { seat: ph.actor, tile: { ...ph.tile } } : null,
+    responseTo: ph.type === 'response' ? { seat: ph.actor, tile: { ...ph.tile }, kind: ph.kind } : null,
     isFuriten: game.isFuriten(seat),
     legalActions: game.legalActions(seat),
   }

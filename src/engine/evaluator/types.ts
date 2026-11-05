@@ -6,7 +6,7 @@ import type { Action, Seat } from '../game/types'
 import type { PlayerView } from '../game/view'
 import type { TileKind } from '../rules/tile'
 
-export const EVALUATOR_VERSION = 'evaluator-0.1.0'
+export const EVALUATOR_VERSION = 'evaluator-0.2.0'
 
 /** full = Mac 向け高精度、light = iPhone 向け軽量（試行回数だけが違い、ロジックは共通） */
 export type EvaluationMode = 'full' | 'light'
@@ -21,11 +21,15 @@ export interface EvaluatorOptions {
 
 export const SIMULATIONS: Record<EvaluationMode, number> = { full: 400, light: 100 }
 
-/** 打牌候補1つの評価 */
+/** 評価した判断の種類 */
+export type DecisionType = 'discard' | 'call' | 'win' | 'kan' | 'kyuushu'
+
+/** 候補1つの評価（打牌・鳴き・カン・和了・スキップなど） */
 export interface CandidateEvaluation {
-  /** 打牌（立直宣言を含む） */
-  action: Extract<Action, { type: 'discard' }>
-  kind: TileKind
+  /** その場で選べた行動 */
+  action: Action
+  /** この候補で切る牌（鳴きは鳴いた後に切る牌。スキップ・和了などは null） */
+  kind: TileKind | null
   riichi: boolean
   label: string
   // --- レベル2：詳細
@@ -59,6 +63,8 @@ export type EvaluationStatus =
 export interface Evaluation {
   /** 評価した局面ID（PlayerView.decisionId） */
   decisionId: number
+  /** 打牌・鳴き・和了・カン・九種九牌 */
+  decision: DecisionType
   seat: Seat
   engineVersion: string
   mode: EvaluationMode
@@ -92,6 +98,8 @@ export interface Evaluation {
     safest: CandidateEvaluation | null
     /** 順位期待値（未対応） */
     rankExpectation: null
+    /** 立直判断（同じ牌で立直とダマを選べたとき） */
+    riichi: { tile: string; riichiEv: number; damaEv: number; recommended: 'riichi' | 'dama'; chosen: 'riichi' | 'dama' } | null
   }
 
   /** 全候補の評価（期待値の高い順） */
