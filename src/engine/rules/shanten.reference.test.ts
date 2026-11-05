@@ -32,7 +32,8 @@ function randomHand(rand: () => number, size: number, kinds: number[]): number[]
 }
 
 describe('高速版と参照実装の一致', () => {
-  it('ランダム手牌 30,000件（全色・一色・字牌多め、副露0〜3）', () => {
+  // 全探索の参照実装は遅いので、CI の遅いマシンでも終わるよう上限を長めにする
+  it('ランダム手牌 30,000件（全色・一色・字牌多め、副露0〜3）', { timeout: 120000 }, () => {
     const rand = rng(20261105)
     const all = Array.from({ length: 34 }, (_, i) => i)
     const pools = [
