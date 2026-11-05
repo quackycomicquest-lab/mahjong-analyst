@@ -65,10 +65,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return
-  // 画面（HTML）はネット優先、つながらなければキャッシュ
+  // 画面（HTML）はネット優先（ブラウザの HTTP キャッシュを使わず毎回最新を確認）、つながらなければキャッシュ
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
+      fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
         .then((res) => {
           const copy = res.clone()
           caches.open(CACHE).then((c) => c.put(BASE, copy))
