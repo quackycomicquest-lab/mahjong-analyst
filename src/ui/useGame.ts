@@ -18,7 +18,9 @@ import { createRng } from '../engine/game/wall'
 import {
   saveEvaluation,
   saveGame,
+  saveQuizResult,
   type GameRecord,
+  type QuizRecord,
   type StoredEvaluation,
   type StoredSettings,
 } from '../storage/db'
@@ -83,6 +85,8 @@ export function useGame(prefs: GameSettings) {
   const [version, setVersion] = useState(0)
   const [evals, setEvals] = useState<EvalEntry[]>([])
   const [saveError, setSaveError] = useState<string | null>(null)
+  /** この対局の点数計算テストの結果 */
+  const [quizLog, setQuizLog] = useState<QuizRecord[]>([])
   const bump = useCallback(() => setVersion((v) => v + 1), [])
 
   const strength = session?.settings.strength ?? prefs.strength
@@ -101,6 +105,7 @@ export function useGame(prefs: GameSettings) {
     setSession({ id: newId(), startedAt: new Date().toISOString(), settings })
     setGame(new MahjongGame({ seed, config: { length: settings.length } }))
     setEvals([])
+    setQuizLog([])
     bump()
   }, [prefs, bump])
 
@@ -111,6 +116,7 @@ export function useGame(prefs: GameSettings) {
       setupBots(record.seed + record.actions.length, makePlayers(record.settings.strength))
       setSession({ id: record.id, startedAt: record.startedAt, settings: record.settings })
       setGame(g)
+      setQuizLog([])
       setEvals(
         stored.map((s) => ({
           decisionId: s.decisionId,
@@ -203,8 +209,25 @@ export function useGame(prefs: GameSettings) {
     [game, session, prefs.evalMode, bump],
   )
 
+  /** 点数計算テストの結果を記録する */
+  const recordQuiz = useCallback(
+    (q: Omit<QuizRecord, 'id' | 'gameId' | 'at'>) => {
+      if (!session) return
+      const rec: QuizRecord = {
+        ...q,
+        id: `${session.id}:${q.roundIndex}:${q.seat}`,
+        gameId: session.id,
+        at: new Date().toISOString(),
+      }
+      setQuizLog((l) => [...l.filter((x) => x.id !== rec.id), rec])
+      saveQuizResult(rec).catch((err: Error) => setSaveError(`点数計算テストを保存できませんでした（${err.message}）`))
+    },
+    [session],
+  )
+
   const view = game ? getPlayerView(game, HUMAN) : null
-  return { game, version, view, players, evals, saveError, start, resume, act }
+  const quizEnabled = prefs.scoreQuiz !== false
+  return { game, version, view, players, evals, saveError, start, resume, act, quizLog, recordQuiz, quizEnabled }
 }
 
 /** 保存用の対局レコードを作る */

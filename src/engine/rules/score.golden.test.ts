@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import golden from './__fixtures__/score-golden.json'
+import { basePayment } from '../coach/scoreQuiz'
 import { calculateHandValue } from './score'
 import { countsOfTiles, countsToNotation, createTileSet, type PhysicalTile } from './tile'
 import type { MeldType, WinInput } from './types'
@@ -121,6 +122,11 @@ describe(`点数計算ゴールデン照合（${cases.length}件）`, () => {
       const costOk = Object.entries(e.cost!).every(
         ([k, v]) => r.payment[k as keyof typeof r.payment] === v,
       )
+      // 点数計算テストの選択肢づくりに使う計算（翻・符からの支払い）も一致すること
+      const bp = basePayment(r.han, r.fu, r.isDealer, g.input.isTsumo, r.yakumanMultiplier)
+      if (bp.main !== r.payment.main || bp.additional !== r.payment.additional) {
+        mismatches.push(`${label}: 翻・符からの支払い ${JSON.stringify(bp)} / 実際 ${r.payment.main}/${r.payment.additional}`)
+      }
       // 役満は符が点数に影響しないので比較しない
       const fuOk = r.yakumanMultiplier > 0 || r.fu === e.fu
       if (r.han !== e.han || !fuOk || !costOk || expYaku.join() !== actYaku.join()) {

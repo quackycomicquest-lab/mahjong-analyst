@@ -14,7 +14,7 @@ import type { useGame } from './useGame'
 type GameHandle = ReturnType<typeof useGame>
 
 export function GameScreen({ handle, onQuit }: { handle: GameHandle; onQuit: () => void }) {
-  const { game, view, players, evals, act, start, saveError } = handle
+  const { game, view, players, evals, act, start, saveError, quizEnabled, recordQuiz, quizLog } = handle
   // iPhone の下部パネル：開いた場面（uiKey）の間だけ開く。自分が判断する場面になったら自動で閉じて手牌を見せる
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   if (!game || !view) return null
@@ -75,14 +75,27 @@ export function GameScreen({ handle, onQuit }: { handle: GameHandle; onQuit: () 
 
       {ph.type === 'roundEnd' && (
         <RoundResultModal
+          key={view.roundIndex}
           result={ph.result}
           players={players}
           willEnd={ph.next === null}
           onNext={() => act({ type: 'nextRound' })}
+          round={view.round}
+          roundIndex={view.roundIndex}
+          doraIndicators={view.doraIndicators}
+          quizEnabled={quizEnabled}
+          onQuizAnswered={recordQuiz}
         />
       )}
       {ph.type === 'gameEnd' && (
-        <GameResultModal result={ph.result} players={players} evals={evals} onRestart={start} onTitle={onQuit} />
+        <GameResultModal
+          result={ph.result}
+          players={players}
+          evals={evals}
+          quizLog={quizLog}
+          onRestart={start}
+          onTitle={onQuit}
+        />
       )}
     </div>
   )

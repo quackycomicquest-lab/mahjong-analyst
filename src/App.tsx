@@ -110,6 +110,17 @@ export default function App() {
         </fieldset>
 
         <fieldset className="field">
+          <legend>和了時の点数計算テスト</legend>
+          <Segmented
+            value={settings.scoreQuiz === false ? 'off' : 'on'}
+            options={[
+              ['on', '出す'],
+              ['off', '出さない'],
+            ]}
+            onChange={(v) => update({ scoreQuiz: v === 'on' })}
+          />
+        </fieldset>
+        <fieldset className="field">
           <legend>AIの打牌の速さ</legend>
           <Segmented
             value={settings.aiSpeed}

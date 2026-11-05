@@ -39,7 +39,10 @@ export function AnalysisScreen({ onBack, onReview }: { onBack: () => void; onRev
     const ids = data.games.map((g) => g.id)
     const ds = filterByRecentGames(data.decisions, ids, PERIODS[period].n)
     const stats = categoryStats(ds)
-    return { ds, stats, abilities: abilities(ds), weakest: weakestCategory(stats) }
+    const n = PERIODS[period].n
+    const gameIds = new Set(n === null ? ids : ids.slice(0, n))
+    const quizzes = data.quizzes.filter((q) => gameIds.has(q.gameId))
+    return { ds, stats, abilities: abilities(ds), weakest: weakestCategory(stats), quizzes }
   }, [data, period])
 
   const due = data?.reviews.filter((r) => isDue(r, data.loadedAt) && !isMastered(r)).length ?? 0
@@ -120,6 +123,21 @@ export function AnalysisScreen({ onBack, onReview }: { onBack: () => void; onRev
                 </p>
               </section>
 
+              <section className="review-card">
+                <div className="review-card__text">
+                  <h2>点数計算テスト</h2>
+                  {view.quizzes.length === 0 ? (
+                    <p className="muted">和了のあとに出る点数計算テストの結果がここに表示されます。</p>
+                  ) : (
+                    <p>
+                      正答率 <b>{Math.round((view.quizzes.filter((q) => q.correct).length / view.quizzes.length) * 100)}%</b>（
+                      {view.quizzes.filter((q) => q.correct).length} / {view.quizzes.length}問）
+                      {quizWeakness(view.quizzes)}
+                    </p>
+                  )}
+                </div>
+              </section>
+
               {view.weakest && (
                 <section className="focus">
                   <div>
@@ -188,6 +206,17 @@ export function AnalysisScreen({ onBack, onReview }: { onBack: () => void; onRev
       )}
     </div>
   )
+}
+
+/** 点数計算テストで間違えやすい帯（満貫未満・満貫以上） */
+function quizWeakness(qs: { correct: boolean; han: number; yakuman: boolean }[]): string {
+  const low = qs.filter((q) => !q.yakuman && q.han < 5)
+  const high = qs.filter((q) => q.yakuman || q.han >= 5)
+  const rate = (xs: typeof qs) => (xs.length ? Math.round((xs.filter((q) => q.correct).length / xs.length) * 100) : null)
+  const parts: string[] = []
+  if (rate(low) !== null) parts.push(`満貫未満 ${rate(low)}%`)
+  if (rate(high) !== null) parts.push(`満貫以上 ${rate(high)}%`)
+  return parts.length ? `　内訳：${parts.join('・')}` : ''
 }
 
 function hasPractice(reviews: ReviewItem[], category: Category): boolean {

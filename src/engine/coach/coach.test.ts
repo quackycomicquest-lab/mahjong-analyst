@@ -7,6 +7,8 @@ import { makeView } from '../testing/makeView'
 import { abilities, categoryStats, filterByRecentGames, weakestCategory, type ScoredDecision } from './abilities'
 import { classifyDecision, isAllLast } from './classify'
 import { enroll, isDue, isMastered, pickPractice, pickSession, schedule } from './review'
+import { basePayment, makeScoreQuiz, paymentLabel } from './scoreQuiz'
+import type { HandValue } from '../rules/score'
 
 const discard = (view: PlayerView, n: string, riichi = false): Action =>
   view.legalActions.find(
@@ -120,5 +122,36 @@ describe('復習の出題間隔', () => {
     const b = { ...enroll('g', 2, 'ベタオリ', 60, now), dueAt: '2099-01-01T00:00:00Z' }
     const c = enroll('g', 4, '牌効率', 10, now)
     expect(pickPractice([b, c, a], 'ベタオリ', 10).map((x) => x.decisionId)).toEqual([1, 2])
+  })
+})
+
+describe('点数計算テスト', () => {
+  it('支払いの表示：ロン・子のツモ・親のツモ', () => {
+    expect(paymentLabel(7700, 0, false, false)).toBe('7700')
+    expect(paymentLabel(3900, 2000, false, true)).toBe('2000-3900')
+    expect(paymentLabel(3900, 3900, true, true)).toBe('3900オール')
+  })
+
+  it('翻・符からの支払い計算は点数計算エンジンと一致する', () => {
+    expect(basePayment(3, 30, false, false)).toEqual({ main: 3900, additional: 0 })
+    expect(basePayment(4, 30, false, true)).toEqual({ main: 3900, additional: 2000 })
+    expect(basePayment(1, 30, true, false)).toEqual({ main: 1500, additional: 0 })
+    expect(basePayment(5, 30, true, true)).toEqual({ main: 4000, additional: 4000 })
+    expect(basePayment(0, 0, false, false, 2)).toEqual({ main: 64000, additional: 0 })
+  })
+
+  it('4択に正解が1つだけ入り、誤答は重複しない', () => {
+    const value = {
+      han: 3,
+      fu: 30,
+      isDealer: false,
+      yakumanMultiplier: 0,
+      payment: { main: 3900, additional: 0 },
+    } as unknown as HandValue
+    const q = makeScoreQuiz(value, false, 7)
+    expect(q.choices).toHaveLength(4)
+    expect(new Set(q.choices).size).toBe(4)
+    expect(q.choices.filter((c) => c === q.answer)).toHaveLength(1)
+    expect(q.answer).toBe('3900')
   })
 })

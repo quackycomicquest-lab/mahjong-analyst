@@ -5,6 +5,7 @@
  * - games        : 対局1件 = seed＋全行動（MahjongGame.replay で完全に再現できる）＋結果・集計
  * - evaluations  : 自分の判断1件 = 判断直前の局面スナップショット＋実際の行動＋評価結果（仕様 §3-4）
  * - reviews      : 復習問題1件 = どの判断を、次にいつ出題するか（仕様 §7-3）
+ * - quizzes      : 点数計算テスト1問の結果
  *
  * 保存に失敗しても（プライベートブラウズなど）対局は続けられるよう、呼び出し側は例外を握りつぶしてよい。
  */
@@ -13,13 +14,30 @@ import type { EvaluationRecord } from '../engine/evaluator/types'
 import type { Action, GameResult } from '../engine/game/types'
 
 export const DB_NAME = 'mahjong-analyst'
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 
 export interface StoredSettings {
   length: 'tonpuu' | 'hanchan'
   strength: 1 | 2 | 3
   evalMode: 'auto' | 'full' | 'light'
   aiSpeed: 'normal' | 'fast'
+  /** 和了の局の終わりに点数計算テストを出す（古い保存データには無いので省略可） */
+  scoreQuiz?: boolean
+}
+
+export interface QuizRecord {
+  /** `${gameId}:${roundIndex}:${seat}` */
+  id: string
+  gameId: string
+  roundIndex: number
+  seat: number
+  at: string
+  correct: boolean
+  answer: string
+  expected: string
+  han: number
+  fu: number
+  yakuman: boolean
 }
 
 export interface GameRecord {
@@ -76,6 +94,11 @@ export function openDb(): Promise<IDBDatabase> {
         const reviews = db.createObjectStore('reviews', { keyPath: ['gameId', 'decisionId'] })
         reviews.createIndex('dueAt', 'dueAt')
       }
+      // v3：点数計算テスト
+      if (!db.objectStoreNames.contains('quizzes')) {
+        const quizzes = db.createObjectStore('quizzes', { keyPath: 'id' })
+        quizzes.createIndex('gameId', 'gameId')
+      }
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
@@ -99,7 +122,10 @@ function request<T>(req: IDBRequest<T>): Promise<T> {
   })
 }
 
-async function store(name: 'games' | 'evaluations' | 'reviews', mode: IDBTransactionMode): Promise<IDBObjectStore> {
+async function store(
+  name: 'games' | 'evaluations' | 'reviews' | 'quizzes',
+  mode: IDBTransactionMode,
+): Promise<IDBObjectStore> {
   const db = await openDb()
   return db.transaction(name, mode).objectStore(name)
 }
@@ -157,4 +183,12 @@ export async function saveReviews(items: ReviewItem[]): Promise<void> {
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
+}
+
+export async function saveQuizResult(record: QuizRecord): Promise<void> {
+  await request((await store('quizzes', 'readwrite')).put(record))
+}
+
+export async function listQuizzes(): Promise<QuizRecord[]> {
+  return (await request((await store('quizzes', 'readonly')).getAll())) as QuizRecord[]
 }

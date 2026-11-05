@@ -10,9 +10,11 @@ import { enroll, REVIEW_THRESHOLD, type ReviewItem } from '../engine/coach/revie
 import {
   listAllEvaluations,
   listGames,
+  listQuizzes,
   listReviews,
   saveReviews,
   type GameRecord,
+  type QuizRecord,
   type StoredEvaluation,
 } from '../storage/db'
 
@@ -25,6 +27,7 @@ export interface CoachData {
   games: GameRecord[]
   decisions: CoachDecision[]
   reviews: ReviewItem[]
+  quizzes: QuizRecord[]
   /** 読み込んだ時刻（出題の期限判定に使う） */
   loadedAt: Date
 }
@@ -32,7 +35,12 @@ export interface CoachData {
 export const reviewKey = (gameId: string, decisionId: number) => `${gameId}:${decisionId}`
 
 export async function loadCoachData(now = new Date()): Promise<CoachData> {
-  const [games, evals, reviews] = await Promise.all([listGames(), listAllEvaluations(), listReviews()])
+  const [games, evals, reviews, quizzes] = await Promise.all([
+    listGames(),
+    listAllEvaluations(),
+    listReviews(),
+    listQuizzes(),
+  ])
   const lengthOf = new Map(games.map((g) => [g.id, g.settings.length]))
   const decisions: CoachDecision[] = []
   for (const r of evals) {
@@ -51,5 +59,5 @@ export async function loadCoachData(now = new Date()): Promise<CoachData> {
     .filter((d) => d.score < REVIEW_THRESHOLD && !existing.has(reviewKey(d.gameId, d.record.decisionId)))
     .map((d) => enroll(d.gameId, d.record.decisionId, d.category, d.score, now))
   await saveReviews(added)
-  return { games, decisions, reviews: [...reviews, ...added], loadedAt: now }
+  return { games, decisions, reviews: [...reviews, ...added], quizzes, loadedAt: now }
 }
