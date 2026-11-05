@@ -18,20 +18,20 @@ const discard = (view: PlayerView, notation: string, riichi = false): Action => 
 const opts = { mode: 'full' as const, seed: 1 }
 
 describe('打牌評価', () => {
-  // 仕様 §3-1 の例：1萬〜6萬 2筒〜5筒 7索 8索 東 東
-  const spec31 = makeView({ hand: '123456m2345p78s11z' })
+  // 仕様 §3-1 の例：1萬〜6萬 2筒〜5筒 7索 8索 東 東（実際の対局と同じく立直も選べる局面）
+  const spec31 = makeView({ hand: '123456m2345p78s11z', riichiAllowed: true })
 
-  it('仕様§3-1の例：東切りは聴牌を逃すので大きく減点、最善は2筒か5筒', () => {
+  it('仕様§3-1の例：東切りは聴牌を逃すので大きく減点、最善は2筒か5筒切り立直', () => {
     const e = evaluateDecision(spec31, discard(spec31, '1z'), opts)
     expect(e.status).toBe('ok')
-    expect(['2筒', '5筒']).toContain(e.best!.label)
+    expect(['2筒（立直）', '5筒（立直）']).toContain(e.best!.label)
     expect(e.score!).toBeLessThan(60)
     expect(e.loss!).toBeGreaterThan(0)
     expect(e.improve.join()).toContain('向聴数が戻る')
   })
 
   it('最善手を選べば100点・損失0', () => {
-    const e = evaluateDecision(spec31, discard(spec31, '2p'), opts)
+    const e = evaluateDecision(spec31, discard(spec31, '2p', true), opts)
     expect(e.score).toBe(100)
     expect(e.loss).toBe(0)
     expect(e.good.join()).toContain('最善手')
@@ -40,7 +40,7 @@ describe('打牌評価', () => {
   it('全候補を同じ局面で評価し、期待値の高い順に並べる', () => {
     const e = evaluateDecision(spec31, discard(spec31, '1z'), opts)
     const kinds = new Set(spec31.hand.map((t) => kindName(t.kind)))
-    expect(e.candidates.map((c) => c.label).sort()).toEqual([...kinds].sort())
+    expect([...new Set(e.candidates.map((c) => c.label.replace('（立直）', '')))].sort()).toEqual([...kinds].sort())
     for (let i = 1; i < e.candidates.length; i++) {
       expect(e.candidates[i - 1].ev).toBeGreaterThanOrEqual(e.candidates[i].ev)
     }
@@ -93,7 +93,7 @@ describe('打牌評価', () => {
     const full = evaluateDecision(spec31, discard(spec31, '1z'), opts)
     const light = evaluateDecision(spec31, discard(spec31, '1z'), { mode: 'light', seed: 1 })
     expect(light.simulations).toBeLessThan(full.simulations)
-    expect(['2筒', '5筒']).toContain(light.best!.label)
+    expect(['2筒（立直）', '5筒（立直）']).toContain(light.best!.label)
     expect(light.confidence).toBeLessThanOrEqual(full.confidence)
   })
 })

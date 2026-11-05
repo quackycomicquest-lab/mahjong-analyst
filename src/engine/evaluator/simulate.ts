@@ -10,8 +10,9 @@
  * - 放銃と他家の和了は抽選せず「生き残り確率」を掛けていく（期待値で計算）
  *
  * 自分の打ち方（シミュレーション内の方針）:
- * - 有効牌を引いたら向聴数が最も進む打牌、引かなければツモ切り
- * - 他家の捨て牌は、向聴数が進み、役（役牌・断幺九・混一色）の見込みがあれば鳴く
+ * - 有効牌を引いたら向聴数が最も進む打牌（聴牌に取るときはフリテンにならない待ちを優先）
+ * - 有効牌でなくても、ツモ牌の方が手の中で最も孤立した牌より役立つなら入れ替える（形の改善）
+ * - 他家の捨て牌は、向聴数が進み、役（役牌・対々和・断幺九・混一色）の見込みがあれば鳴く
  *   （役牌のポン以外は鳴いた後が2向聴以内のとき。チーは上家の捨て牌だけ。立直中・脅威があって遠いときは鳴かない）
  *   鳴いたらすぐ打牌し、間の打ち手を飛ばして手番が進む
  * - 脅威（立直・2副露以上）があり2向聴以上なら、最も安全な牌を切って降りる
@@ -279,18 +280,40 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
           const s14 = fastShanten(c, meldCount)
           // s14 === -1 は役なしで和了できなかった形。ツモ切りして聴牌を維持する
           if (s14 < shanten && s14 >= 0) {
-            let bestRisk = Infinity
+            // 向聴数が進む打牌の中から、安全なものを選ぶ。
+            // 聴牌に取るときは、自分の河にある牌（と今切る牌）が当たりにならない打牌を優先（フリテン回避）
+            const options: TileKind[] = []
             for (let k = 0; k < KIND_COUNT; k++) {
               if (c[k] === 0) continue
               c[k]--
-              const s = fastShanten(c, meldCount)
+              if (fastShanten(c, meldCount) === s14) options.push(k)
               c[k]++
-              if (s === s14 && setup.dealInProb[k] < bestRisk) {
-                bestRisk = setup.dealInProb[k]
-                discard = k
-              }
+            }
+            options.sort((a, b) => setup.dealInProb[a] - setup.dealInProb[b])
+            discard = options[0]
+            if (s14 === 0) {
+              const fresh = options.find((k) => !makesFuriten(c, k, furiten, meldCount))
+              if (fresh !== undefined) discard = fresh
             }
             shanten = s14
+          } else if (s14 >= 0 && shanten > 0) {
+            // 形の改善：ツモ牌の方が、手の中で最も孤立した牌より役に立つなら入れ替える（向聴数が戻らない場合のみ）
+            let worst = -1
+            let worstU = Infinity
+            for (let k = 0; k < KIND_COUNT; k++) {
+              if (c[k] === 0 || k === draw) continue
+              const u = usefulness(c, k)
+              if (u < worstU) {
+                worstU = u
+                worst = k
+              }
+            }
+            if (worst >= 0 && usefulness(c, draw) > worstU + 0.5) {
+              c[worst]--
+              const s = fastShanten(c, meldCount)
+              c[worst]++
+              if (s === shanten) discard = worst
+            }
           }
         }
       }
@@ -340,6 +363,36 @@ function callChance(trial: number, pos: number): number {
   return (h >>> 0) / 4294967296
 }
 
+/**
+ * 牌の役立ち度（形の改善の目安）。同じ牌・隣・一つ飛びにある牌の枚数で数える。
+ * 孤立した字牌・端牌ほど小さい。c にはその牌自身を含む。
+ */
+function usefulness(c: number[], k: TileKind): number {
+  const same = c[k] - 1
+  if (k >= 27) return same * 3
+  const r = k % 9
+  const at = (d: number) => (r + d >= 0 && r + d <= 8 ? c[k + d] : 0)
+  let u = same * 2.5 + (at(-1) + at(1)) * 2 + (at(-2) + at(2)) * 1
+  if (r === 0 || r === 8) u -= 0.5
+  else if (r === 1 || r === 7) u -= 0.25
+  return u
+}
+
+/** 14枚の手から k を切って聴牌に取ったとき、自分の河の牌（と k）が当たりになるか */
+function makesFuriten(c14: number[], k: TileKind, furiten: Set<TileKind>, meldCount: number): boolean {
+  c14[k]--
+  let hit = false
+  for (const w of [...furiten, k]) {
+    if (c14[w] >= 4) continue
+    c14[w]++
+    if (fastShanten(c14, meldCount) === -1) hit = true
+    c14[w]--
+    if (hit) break
+  }
+  c14[k]++
+  return hit
+}
+
 function isFuriten(c14: number[], winTile: TileKind, furiten: Set<TileKind>, meldCount: number): boolean {
   if (furiten.has(winTile)) return true
   c14[winTile]--
@@ -387,7 +440,7 @@ function winValue(
 }
 
 /**
- * 鳴いた後に役を作れる見込みがあるか（役牌・断幺九・混一色）。
+ * 鳴いた後に役を作れる見込みがあるか（役牌・対々和・断幺九・混一色）。
  * @param c 鳴きに使う牌を抜いた後の手牌
  */
 function openYakuPossible(
@@ -402,6 +455,12 @@ function openYakuPossible(
   if (type === 'pon' && yakuhai.has(newMeld[2])) return true
   if (meldKinds.some((m) => m[0] === m[1] && yakuhai.has(m[0]))) return true
   for (const k of yakuhai) if (c[k] >= 3) return true
+  // 対々和：ポンだけで、手の対子・暗刻と副露を合わせて4組以上
+  if (type === 'pon' && allMelds.every((m) => m[0] === m[1])) {
+    let sets = allMelds.length
+    for (let k = 0; k < KIND_COUNT; k++) if (c[k] >= 2) sets++
+    if (sets >= 5) return true
+  }
   // 断幺九：副露に么九牌がなく、手の么九牌が1枚以下
   const isYaochu = (k: TileKind) => k >= 27 || k % 9 === 0 || k % 9 === 8
   if (allMelds.every((m) => m.every((k) => !isYaochu(k)))) {
