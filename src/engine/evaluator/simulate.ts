@@ -15,6 +15,7 @@
  * - 門前で聴牌したら立直（立直後はツモ切り）。ただし打牌時点で聴牌の候補は、その候補の立直・ダマのまま進める
  */
 
+import { drawPayment, riichiBonusRate, ronRate } from '../calibration/calibration'
 import { createRng } from '../game/wall'
 import type { PlayerView } from '../game/view'
 import { waitingKinds } from '../rules/agari'
@@ -36,9 +37,15 @@ export interface SimSetup {
   dealInProb: Float64Array
   /** 種類ごとの放銃時の失点 */
   dealInLoss: Float64Array
-  /** 他家の打牌1回ごとに、他家同士で局が終わる確率 */
-  otherEndHazard: number
+  /** 自分の t 回目のツモまでの他家の打牌1回ごとに、自分以外の和了で局が終わる確率 */
+  otherEndHazard: Float64Array
+  /** 同上（自分が立直しているとき。他家が守りに回るので下がる） */
+  otherEndHazardSelfRiichi: Float64Array
   hasThreat: boolean
+  /** 自分の t 回目のツモ後の打牌で、今は見えていない脅威（この先の立直・ダマ聴牌）に放銃する確率 */
+  futureDealIn: Float64Array
+  /** その場合の平均失点 */
+  futureDealInLoss: number
   /** 自分の河にある牌の種類（フリテン判定） */
   riverKinds: TileKind[]
   /** 場の供託・本場 */
@@ -47,12 +54,21 @@ export interface SimSetup {
 }
 
 export interface SimCandidate {
-  kind: TileKind
+  /** この候補で切る牌（スキップなど、切らない場合は null） */
+  kind: TileKind | null
   riichi: boolean
   /** 打牌後の手牌（3n+1枚）の種類別枚数 */
   counts: number[]
   /** 打牌後も手に残る赤5の種類 */
   redKinds: TileKind[]
+  /** 鳴き・カンで副露が変わる場合の副露 */
+  melds?: Meld[]
+  /** 鳴きで門前でなくなる場合は false */
+  menzen?: boolean
+  /** カンの直後など、他家の打牌より先に自分がツモる */
+  drawFirst?: boolean
+  /** 見逃したロンなど、追加でフリテンになる牌 */
+  extraFuriten?: TileKind[]
 }
 
 export interface SimOutcome {
@@ -66,16 +82,12 @@ export interface SimOutcome {
 }
 
 const RIICHI_STICK = 1000
-/** 他家の打牌が当たり牌だったときに、実際に切られる割合（ダマ／立直） */
-const RON_RATE_DAMA = 0.45
-const RON_RATE_RIICHI = 0.25
-/** 流局時に聴牌していた場合／していなかった場合の収支の目安（ノーテン罰符の平均） */
-const TENPAI_BONUS = 1000
-const NOTEN_PENALTY = 500
-/** 自分が立直すると他家は守りに回るので、他家の和了で局が終わる確率が下がる */
-const RIICHI_PRESSURE = 0.6
-/** 立直で和了したときの裏ドラ・一発の期待分（打点の倍率） */
-const RIICHI_BONUS_RATE = 1.2
+// 以下の定数は AI 同士の大量対局で実測した値（calibration.json。無ければ経験則の既定値）
+const RON_RATE_DAMA = ronRate(false)
+const RON_RATE_RIICHI = ronRate(true)
+const TENPAI_BONUS = drawPayment(true)
+const NOTEN_PENALTY = -drawPayment(false)
+const RIICHI_BONUS_RATE = riichiBonusRate()
 
 function fastShanten(c: number[], meldCount: number): number {
   let s = regularShantenUnadjusted(c, meldCount)
@@ -88,7 +100,9 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
   let winSum = 0
   let winValueSum = 0
   let dealInSum = 0
-  const meldCount = setup.melds.length
+  const melds = cand.melds ?? setup.melds
+  const menzen = cand.menzen ?? setup.menzen
+  const meldCount = melds.length
   const need = setup.ownTurns * 4
 
   for (let i = 0; i < n; i++) {
@@ -110,19 +124,23 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
     let riichi = cand.riichi
     let stickWeight = riichi ? 1 : 0 // 立直棒を払っている確率の重み
     const furiten = new Set<TileKind>(setup.riverKinds)
-    furiten.add(cand.kind)
+    if (cand.kind !== null) furiten.add(cand.kind)
+    for (const k of cand.extraFuriten ?? []) furiten.add(k)
 
     // 打牌した瞬間の放銃
     let alive = 1
     let outcome = 0
     let dealIn = 0
-    const discardRisk = (k: TileKind) => {
-      const p = setup.dealInProb[k]
-      outcome -= alive * p * setup.dealInLoss[k]
+    // future：この先の打牌なら、今は見えていない脅威への放銃率も足す（降りているときは半分）
+    const discardRisk = (k: TileKind, future = 0) => {
+      const p1 = setup.dealInProb[k]
+      const p = Math.min(0.5, p1 + future)
+      const loss = p > 0 ? (p1 * setup.dealInLoss[k] + (p - p1) * setup.futureDealInLoss) / p : 0
+      outcome -= alive * p * loss
       dealIn += alive * p
       alive *= 1 - p
     }
-    discardRisk(cand.kind)
+    if (cand.kind !== null) discardRisk(cand.kind)
 
     let won = 0 // 和了した確率
     let wonPoints = 0 // Σ 和了確率 × 点
@@ -132,13 +150,14 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
     for (let t = 0; t < setup.ownTurns && idx < m && !ended; t++) {
       // 他家3人の打牌（ロンの機会）。他家は当たり牌をいつも切るわけではないので、
       // 当たり牌が出る割合を掛ける（立直していれば他家は警戒してさらに出にくい）
-      for (let j = 0; j < 3 && idx < m; j++) {
-        alive *= 1 - setup.otherEndHazard * (riichi ? RIICHI_PRESSURE : 1)
+      const others = t === 0 && cand.drawFirst ? 0 : 3
+      for (let j = 0; j < others && idx < m; j++) {
+        alive *= 1 - (riichi ? setup.otherEndHazardSelfRiichi[t] : setup.otherEndHazard[t])
         const tile = pool[idx++]
         if (shanten !== 0) continue
         c[tile]++
         if (fastShanten(c, meldCount) === -1 && !isFuriten(c, tile, furiten, meldCount)) {
-          const v = winValue(setup, cand, c, tile, false, riichi)
+          const v = winValue(setup, cand, melds, menzen, c, tile, false, riichi)
           if (v > 0) {
             const p = alive * (riichi ? RON_RATE_RIICHI : RON_RATE_DAMA)
             outcome += p * v
@@ -155,7 +174,7 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
       const draw = pool[idx++]
       c[draw]++
       if (shanten === 0 && fastShanten(c, meldCount) === -1) {
-        const v = winValue(setup, cand, c, draw, true, riichi)
+        const v = winValue(setup, cand, melds, menzen, c, draw, true, riichi)
         if (v > 0) {
           outcome += alive * v
           won += alive
@@ -199,10 +218,11 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
       }
       c[discard]--
       furiten.add(discard)
-      discardRisk(discard)
+      const folding = !riichi && setup.hasThreat && shanten >= 2
+      discardRisk(discard, (setup.futureDealIn[t] ?? 0) * (folding ? 0.5 : 1))
 
       // 門前で（新たに）聴牌したら立直する
-      if (!riichi && !decidedAtStart && setup.menzen && shanten === 0 && t < setup.ownTurns - 1) {
+      if (!riichi && !decidedAtStart && menzen && shanten === 0 && t < setup.ownTurns - 1) {
         riichi = true
         stickWeight = alive
       }
@@ -246,6 +266,8 @@ function isFuriten(c14: number[], winTile: TileKind, furiten: Set<TileKind>, mel
 function winValue(
   setup: SimSetup,
   cand: SimCandidate,
+  melds: Meld[],
+  menzen: boolean,
   c14: number[],
   winKind: TileKind,
   tsumo: boolean,
@@ -264,9 +286,9 @@ function winValue(
   const v = calculateHandValue({
     hand,
     winTile: winTile!,
-    melds: setup.melds,
+    melds,
     isTsumo: tsumo,
-    riichi: riichi && setup.menzen ? 'riichi' : 'none',
+    riichi: riichi && menzen ? 'riichi' : 'none',
     seatWind: seatWindOf(setup.view),
     roundWind: setup.view.round.wind,
     doraIndicators: setup.view.doraIndicators,
@@ -274,6 +296,6 @@ function winValue(
   })
   if (!v.ok) return 0
   const p = v.payment
-  const gain = (tsumo ? p.total : p.main + p.mainBonus) * (riichi && setup.menzen ? RIICHI_BONUS_RATE : 1)
+  const gain = (tsumo ? p.total : p.main + p.mainBonus) * (riichi && menzen ? RIICHI_BONUS_RATE : 1)
   return Math.round(gain) + setup.kyoutaku * 1000
 }

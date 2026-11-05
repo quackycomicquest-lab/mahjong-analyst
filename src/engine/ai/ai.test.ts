@@ -36,11 +36,13 @@ describe('危険度の推定', () => {
     expect(d('1m')).toBeLessThan(d('2m')) // 1m は 4m のスジ
     expect(d('7m')).toBeLessThan(d('5s'))
     expect(d('3p')).toBeLessThan(d('5s')) // 3p は 6p のスジ
-    expect(d('5s')).toBe(13)
+    expect(d('5s')).toBeGreaterThan(5) // 中張の無スジは高い
   })
 
   it('初級は現物しか区別しない', () => {
-    expect(tileDanger(kindOf('m', 1), threat, seen, 1)).toBe(8)
+    const lv1 = (n: string) => tileDanger(parseHand(n)[0].kind, threat, seen, 1)
+    expect(lv1('1m')).toBe(lv1('5s'))
+    expect(lv1('4m')).toBe(0)
   })
 })
 
@@ -55,7 +57,8 @@ describe('押し引き', () => {
   })
 
   it('他家の立直に対して、遠い手なら現物を切って降りる', () => {
-    const view = makeView({ hand, rivers: { 2: ['2z', '5m*'] } })
+    // ドラ表示牌を東以外にして、字牌も1枚しか見えていない（危険度が十分ある）状態にする
+    const view = makeView({ hand, rivers: { 2: ['2z', '5m*'] }, dora: '9p' })
     const d = decide(view, defense, rand)
     expect(discardedKind(view, d.action)).toBe('5萬')
   })

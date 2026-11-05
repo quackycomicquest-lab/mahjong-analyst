@@ -15,7 +15,9 @@
     "bench": "tsx bench/shanten.bench.ts",
     "league": "tsx bench/ai-league.ts",
     "eval-demo": "tsx bench/eval-demo.ts",
-    "eval-timing": "tsx bench/eval-timing.ts"
+    "eval-timing": "tsx bench/eval-timing.ts",
+    "calibrate": "for i in 0 1 2 3 4 5 6 7; do tsx bench/calibrate.ts ${GAMES:-1250} $((100000 + i * 100000)) calibration-raw/raw-$i.json & done; wait && tsx bench/calibrate-merge.ts calibration-raw/raw-*.json",
+    "validate": "tsx bench/validate-evaluator.ts"
   },
   "dependencies": {
     "react": "^19.3.1",
