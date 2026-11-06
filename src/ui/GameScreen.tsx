@@ -2,7 +2,7 @@
  * 対局画面（仕様 §2-2, §8-2）
  * Mac：横長の卓＋右側に評価パネル
  * iPhone：横画面で、卓を中央・手牌を下いっぱい・操作ボタンを手牌の右上・AI評価を右上に置く（雀魂のスマートフォン版と同じ配置）。
- *         縦向きのときは横向きにするよう案内する（縦のまま使うこともできる）
+ *         縦持ちでも画面ごと回して横画面にする（src/viewport.ts）
  * 縦長の画面・幅の狭いウィンドウ：縦長の卓＋下部に折りたためる評価パネル
  */
 import { useState } from 'react'
@@ -35,7 +35,6 @@ export function GameScreen({
   const { game, view, players, evals, act, start, saveError, quizEnabled, recordQuiz, quizLog } = handle
   // iPhone の下部パネル：開いた場面（uiKey）の間だけ開く。自分が判断する場面になったら自動で閉じて手牌を見せる
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
-  const [portraitOk, setPortraitOk] = useState(false)
   if (!game || !view) return null
   const ph = game.phase
   const activeSeat = ph.type === 'turn' ? ph.seat : ph.type === 'response' ? ph.actor : null
@@ -115,18 +114,6 @@ export function GameScreen({
           onToggle={() => setExpandedKey(expandedKey === uiKey ? null : uiKey)}
         />
       </aside>
-
-      <div className={`rotate-hint ${portraitOk ? 'is-dismissed' : ''}`} role="dialog" aria-label="横向きの案内">
-        <div className="rotate-hint__icon" aria-hidden />
-        <p>
-          iPhoneを横向きにしてください。
-          <br />
-          <span className="muted small">横画面で、卓と手牌を大きく表示します。</span>
-        </p>
-        <button type="button" className="btn btn--plain" onClick={() => setPortraitOk(true)}>
-          縦のまま使う
-        </button>
-      </div>
 
       {ph.type === 'roundEnd' && (
         <RoundResultModal

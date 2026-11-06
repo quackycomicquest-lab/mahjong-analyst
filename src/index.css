@@ -19,8 +19,11 @@
   --good: #b4d86a;
   --fair: #e6a23c;
   --poor: #ef6a5f;
-  --hand-tw: clamp(32px, calc((100vw - 420px) / 16.5), 52px);
+  --hand-tw: clamp(32px, calc((var(--app-w) - 420px) / 16.5), 52px);
   --meld-tw: 30px;
+  /* アプリの画面の幅・高さ（src/viewport.ts が px で設定する。縦持ちの iPhone で画面ごと回すときは入れ替わる） */
+  --app-w: 100vw;
+  --app-h: 100dvh;
   color-scheme: dark;
 }
 
@@ -185,7 +188,7 @@ button {
 /* ------------------------------------------------------------------ タイトル */
 
 .title {
-  min-height: 100dvh;
+  min-height: var(--app-h);
   display: grid;
   place-items: center;
   padding: 24px 16px;
@@ -281,7 +284,7 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
   grid-template-rows: auto minmax(0, 1fr);
-  height: 100dvh;
+  height: var(--app-h);
 }
 .topbar {
   grid-column: 1 / -1;
@@ -345,7 +348,7 @@ button {
 /* ------------------------------------------------------------------ 卓（雀魂の画面構成を参考） */
 
 .board {
-  --S: min(calc(100dvh - 60px - 190px), calc(100vw - 380px - 40px));
+  --S: min(calc(var(--app-h) - 60px - 190px), calc(var(--app-w) - 380px - 40px));
   width: var(--S);
   height: var(--S);
   flex: none;
@@ -865,7 +868,7 @@ button {
 }
 .modal__card {
   width: min(560px, 100%);
-  max-height: calc(100dvh - 32px);
+  max-height: calc(var(--app-h) - 32px);
   overflow-y: auto;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -932,7 +935,7 @@ button {
   flex-wrap: wrap;
   gap: 2px;
   align-items: flex-end;
-  --meld-tw: clamp(18px, calc((100vw - 80px) / 17), 30px);
+  --meld-tw: clamp(18px, calc((var(--app-w) - 80px) / 17), 30px);
 }
 .win__gap {
   width: 8px;
@@ -1024,58 +1027,58 @@ button {
 /* ------------------------------------------------------------------ 縦長の画面・幅の狭いウィンドウ（iPhone の横画面は下の「iPhone（横画面）」） */
 
 @media (max-width: 899px) and (min-height: 541px), (orientation: portrait) {
-  :root {
-    --hand-tw: min(calc((100vw - 20px) / 15.4), 44px);
-    --meld-tw: min(calc((100vw - 20px) / 20), 28px);
+  html:not(.phone-land) {
+    --hand-tw: min(calc((var(--app-w) - 20px) / 15.4), 44px);
+    --meld-tw: min(calc((var(--app-w) - 20px) / 20), 28px);
   }
-  .game {
+  html:not(.phone-land) .game {
     display: flex;
     flex-direction: column;
-    height: 100dvh;
+    height: var(--app-h);
   }
-  .topbar {
+  html:not(.phone-land) .topbar {
     padding-inline: 10px;
   }
-  .topbar__brand {
+  html:not(.phone-land) .topbar__brand {
     display: none;
   }
-  .topbar {
+  html:not(.phone-land) .topbar {
     gap: 10px;
   }
 
-  .table-area {
+  html:not(.phone-land) .table-area {
     flex: 1;
     justify-content: flex-start;
     padding: 6px 6px calc(64px + env(safe-area-inset-bottom));
     gap: 6px;
   }
-  .board {
-    --S: min(calc(100vw - 12px), calc(100dvh - 44px - 160px - 72px));
+  html:not(.phone-land) .board {
+    --S: min(calc(var(--app-w) - 12px), calc(var(--app-h) - 44px - 160px - 72px));
   }
-  .tile--river {
+  html:not(.phone-land) .tile--river {
     --tw: 4.4cqw;
   }
-  .center__sticks {
+  html:not(.phone-land) .center__sticks {
     display: none;
   }
-  .river {
+  html:not(.phone-land) .river {
     width: calc(6 * 4.4cqw + 5 * 0.2cqw + 1.6cqw);
   }
-  .hand-row {
+  html:not(.phone-land) .hand-row {
     flex-direction: column-reverse;
     align-items: flex-end;
     gap: 6px;
   }
-  .action-bar {
+  html:not(.phone-land) .action-bar {
     min-height: 40px;
     gap: 6px;
   }
-  .action-bar__status {
+  html:not(.phone-land) .action-bar__status {
     font-size: 0.8rem;
     width: 100%;
     text-align: center;
   }
-  .side {
+  html:not(.phone-land) .side {
     position: fixed;
     left: 0;
     right: 0;
@@ -1083,26 +1086,26 @@ button {
     border-left: none;
     border-top: 1px solid var(--line);
     border-radius: 16px 16px 0 0;
-    max-height: 72dvh;
+    max-height: calc(var(--app-h) * 0.72);
     box-shadow: 0 -8px 24px rgb(0 0 0 / 0.45);
     z-index: 20;
     padding-bottom: env(safe-area-inset-bottom);
   }
-  .eval__handle {
+  html:not(.phone-land) .eval__handle {
     cursor: pointer;
     min-height: 56px;
   }
-  .eval__chevron {
+  html:not(.phone-land) .eval__chevron {
     display: inline;
     color: var(--muted);
   }
-  .eval.is-collapsed .eval__body {
+  html:not(.phone-land) .eval.is-collapsed .eval__body {
     display: none;
   }
-  .eval.is-collapsed .eval__handle {
+  html:not(.phone-land) .eval.is-collapsed .eval__handle {
     border-bottom: none;
   }
-  .score__value {
+  html:not(.phone-land) .score__value {
     font-size: 2.2rem;
   }
 }
@@ -1237,7 +1240,7 @@ button {
   flex-wrap: wrap;
   gap: 2px;
   padding-top: 8px;
-  --meld-tw: clamp(20px, calc((100vw - 64px) / 15), 32px);
+  --meld-tw: clamp(20px, calc((var(--app-w) - 64px) / 15), 32px);
 }
 .position__legend {
   margin: 0;
@@ -1245,14 +1248,14 @@ button {
 }
 
 @media (max-width: 899px) and (min-height: 541px), (orientation: portrait) {
-  .history-item {
+  html:not(.phone-land) .history-item {
     grid-template-columns: 1fr auto;
     row-gap: 2px;
   }
-  .review {
+  html:not(.phone-land) .review {
     grid-template-columns: 1fr;
   }
-  .review__detail {
+  html:not(.phone-land) .review__detail {
     position: static;
     order: -1;
   }
@@ -1479,14 +1482,14 @@ button {
 }
 
 @media (max-width: 899px) and (min-height: 541px), (orientation: portrait) {
-  .ability {
+  html:not(.phone-land) .ability {
     grid-template-columns: 6.5em 1fr 5.5em;
     font-size: 0.85rem;
   }
-  .problem__player {
+  html:not(.phone-land) .problem__player {
     grid-template-columns: 1fr;
   }
-  .stats {
+  html:not(.phone-land) .stats {
     font-size: 0.8rem;
   }
 }
@@ -1608,7 +1611,7 @@ button {
 }
 .result-card {
   width: min(620px, 100%);
-  max-height: calc(100dvh - 32px);
+  max-height: calc(var(--app-h) - 32px);
   overflow-y: auto;
   padding: 20px 22px;
   border-radius: 20px;
@@ -1975,21 +1978,21 @@ button {
 }
 
 @media (max-width: 899px) and (min-height: 541px), (orientation: portrait) {
-  .action-bar {
+  html:not(.phone-land) .action-bar {
     justify-content: center;
   }
-  .action-bar__buttons {
+  html:not(.phone-land) .action-bar__buttons {
     justify-content: center;
   }
-  .action-bar .btn {
+  html:not(.phone-land) .action-bar .btn {
     min-width: 84px;
     min-height: 48px;
     font-size: 1.1rem;
   }
-  .result-banner {
+  html:not(.phone-land) .result-banner {
     font-size: 1.8rem;
   }
-  .win__points {
+  html:not(.phone-land) .win__points {
     font-size: 1.8rem;
   }
 }
@@ -1998,322 +2001,357 @@ button {
    雀魂のスマートフォン版と同じ配置：卓を画面の中央に大きく置き、自分の手牌を画面の下いっぱいに、
    操作ボタンを手牌の右上に、局の情報を左上に、メニューとAI評価を右上に置く。 */
 
-@media (orientation: landscape) and (max-height: 540px) {
-  :root {
-    --safe-l: env(safe-area-inset-left, 0px);
-    --safe-r: env(safe-area-inset-right, 0px);
-    --hand-tw: min(calc((100vw - var(--safe-l) - var(--safe-r) - 40px) / 15.6), 12.5dvh);
-    --meld-tw: calc(var(--hand-tw) * 0.7);
-    /* 手牌の段の高さ（牌の高さ＋選んだ牌が浮く分） */
-    --hand-h: calc(var(--hand-tw) * 1.68 + 4px);
-    /* 卓の一辺：卓の下の 15% に手牌が重なる */
-    --board-s: min(calc((100dvh - var(--hand-h) - 4px) / 0.85), calc(100dvh - 8px));
-    /* 卓の左右の余白 */
-    --gutter: calc((100vw - var(--board-s)) / 2);
-  }
-  .game {
-    display: block;
-    position: relative;
-    height: 100dvh;
-    overflow: hidden;
-    background:
-      radial-gradient(ellipse at 50% 45%, #173a5c 0%, transparent 65%),
-      var(--bg);
-  }
-
-  /* 左上：局・供託・残り枚数・ドラ ／ 右上：速さ・終了 */
-  .topbar {
-    position: absolute;
-    inset: 0 0 auto 0;
-    z-index: 16;
-    display: grid;
-    grid-template-columns: auto 1fr auto auto;
-    align-items: start;
-    gap: 4px 6px;
-    padding: 6px calc(var(--safe-r) + 8px) 0 calc(var(--safe-l) + 8px);
-    background: transparent;
-    border: none;
-    pointer-events: none;
-  }
-  .topbar > * {
-    pointer-events: auto;
-  }
-  .topbar__brand {
-    display: none;
-  }
-  .topbar__round {
-    grid-column: 1;
-    grid-row: 1;
-    justify-self: start;
-    padding: 2px 10px;
-    border-radius: 8px;
-    background: rgb(8 16 30 / 0.78);
-    border: 1px solid rgb(242 193 78 / 0.4);
-    font-size: 0.85rem;
-  }
-  .topbar__info {
-    grid-column: 1;
-    grid-row: 2;
-    justify-self: start;
-    flex-wrap: wrap;
-    max-width: calc(var(--gutter) - var(--safe-l) - 14px);
-    padding: 3px 8px;
-    border-radius: 8px;
-    background: rgb(8 16 30 / 0.7);
-    font-size: 0.72rem;
-  }
-  .topbar .tile--mini {
-    --tw: 18px;
-  }
-  .topbar > .btn {
-    grid-row: 1;
-    min-height: 30px;
-    padding: 2px 12px;
-    font-size: 0.78rem;
-    margin-left: 0;
-    background: rgb(8 16 30 / 0.78);
-  }
-  /* 音の切り替えは左上（局の情報の下）。右上は卓と重なりやすいので速さ・終了だけにする */
-  .topbar > .btn.topbar__sound {
-    grid-column: 1;
-    grid-row: 3;
-    justify-self: start;
-    padding-inline: 10px;
-  }
-  .topbar__sound-text {
-    display: none;
-  }
-  .topbar__speed {
-    grid-column: 3;
-  }
-  .topbar > .btn:last-child {
-    grid-column: 4;
-  }
-  .save-error {
-    position: absolute;
-    top: 4px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 17;
-    border-radius: 8px;
-    max-width: 50vw;
-  }
-
-  /* 卓：画面の上から、左右の中央に */
-  .table-area {
-    position: absolute;
-    inset: 0;
-    display: block;
-    padding: 0;
-    overflow: visible;
-  }
-  .board {
-    --S: var(--board-s);
-    position: absolute;
-    top: 4px;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-
-  /* 卓の下端は手牌に隠れるので、下側の2人の表示を上げる */
-  .player-plate--0,
-  .player-plate--1 {
-    bottom: 16cqw;
-  }
-
-  /* 手牌：画面の下いっぱいに（卓の下端に重ねる） */
-  .controls {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 12;
-    display: block;
-    padding: 0 calc(var(--safe-r) + 8px) 0 calc(var(--safe-l) + 8px);
-    pointer-events: none;
-  }
-  .hand-row {
-    flex-direction: row;
-    justify-content: center;
-    align-items: flex-end;
-    gap: 10px;
-    margin: 0 auto;
-    pointer-events: auto;
-  }
-  .hand {
-    padding: calc(var(--hand-tw) * 0.3) 4px 2px;
-    background: none;
-    border-radius: 0;
-  }
-  .hand.is-active {
-    box-shadow: none;
-  }
-  .my-melds {
-    padding-bottom: 2px;
-  }
-  .my-melds .melds {
-    gap: 4px;
-  }
-
-  /* 操作ボタン：手牌の右上に大きく ／ 案内文：手牌の左上に */
-  .action-bar {
-    position: absolute;
-    left: calc(var(--safe-l) + 10px);
-    right: calc(var(--safe-r) + 12px);
-    bottom: calc(var(--hand-h) + 4px);
-    width: auto;
-    min-height: 0;
-    justify-content: space-between;
-    align-items: flex-end;
-    flex-wrap: nowrap;
-    pointer-events: none;
-  }
-  .action-bar__status {
-    max-width: calc(var(--gutter) - var(--safe-l) - 16px);
-    padding: 3px 8px;
-    border-radius: 8px;
-    background: rgb(8 16 30 / 0.7);
-    font-size: 0.7rem;
-    line-height: 1.35;
-  }
-  .action-bar__status:empty {
-    display: none;
-  }
-  .action-bar__buttons {
-    justify-content: flex-end;
-    flex-wrap: wrap-reverse;
-    gap: 6px;
-    max-width: 60vw;
-    pointer-events: auto;
-  }
-  .action-bar .btn {
-    min-width: 78px;
-    min-height: 42px;
-    padding: 4px 14px;
-    font-size: 1rem;
-    letter-spacing: 0.08em;
-  }
-
-  /* AI評価：右上の小さなカード。開くと右側に大きく出す */
-  .side {
-    position: absolute;
-    top: 42px;
-    right: calc(var(--safe-r) + 8px);
-    width: max(170px, min(300px, calc(var(--gutter) - var(--safe-r) - 14px)));
-    max-height: calc(100dvh - 42px - var(--hand-h) - 64px);
-    z-index: 14;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: rgb(17 29 49 / 0.94);
-    box-shadow: 0 6px 18px rgb(0 0 0 / 0.45);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .side:has(.eval:not(.is-collapsed)) {
-    top: 6px;
-    width: min(460px, calc(100vw - var(--safe-r) - var(--safe-l) - 16px), 62vw);
-    /* 開いていても手牌は隠さない（読みながら打てるように） */
-    max-height: calc(100dvh - var(--hand-h) - 10px);
-    z-index: 30;
-  }
-  .eval__handle {
-    cursor: pointer;
-    min-height: 40px;
-    padding: 6px 10px;
-    gap: 6px;
-    position: sticky;
-    top: 0;
-    background: rgb(17 29 49 / 0.98);
-    z-index: 1;
-  }
-  .eval__title {
-    font-size: 0.85rem;
-    white-space: nowrap;
-  }
-  .eval__summary {
-    font-size: 0.8rem;
-  }
-  .eval__chevron {
-    display: inline;
-    color: var(--muted);
-  }
-  .eval.is-collapsed .eval__body {
-    display: none;
-  }
-  .eval.is-collapsed .eval__handle {
-    border-bottom: none;
-  }
-  .eval__body {
-    padding: 10px 12px 16px;
-  }
-
-  /* 結果・点数計算テスト：高さが足りないので詰める */
-  .modal {
-    padding: 6px calc(var(--safe-r) + 8px) 6px calc(var(--safe-l) + 8px);
-  }
-  .result-card {
-    max-height: calc(100dvh - 12px);
-    padding: 12px 16px;
-  }
-  .result-card--quiz {
-    width: 100%;
-  }
-  .quiz {
-    gap: 12px;
-  }
-  .quiz__main {
-    gap: 6px;
-  }
-  .quiz__question {
-    font-size: 0.95rem;
-  }
-  .score-cell {
-    min-width: 58px;
-    min-height: 23px;
-    font-size: 0.74rem;
-    padding: 1px 4px;
-  }
-  .score-limits .score-cell {
-    min-width: 116px;
-    min-height: 26px;
-  }
-  .score-limits {
-    padding-top: 19px;
-  }
+/* 縦持ちの iPhone：アプリ全体を右に90度回して横画面にする（画面の向きのロック中でも横画面で使える）。
+   回した画面の上辺は端末の右辺になるので、端末を左に倒して持つ。切り欠きは左、ホームバーは右に来る */
+html.phone-rotated,
+html.phone-rotated body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
+html.phone-rotated #root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--app-w);
+  height: var(--app-h);
+  min-height: 0;
+  transform-origin: top left;
+  transform: translateX(var(--vp-w)) rotate(90deg);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* iPhone の横画面（html.phone-land。縦持ちでも画面ごと回して横画面にする） */
+html.phone-land {
+  /* 横画面の左右の安全領域（切り欠き・ホームバー） */
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --hand-tw: min(calc((var(--app-w) - var(--safe-l) - var(--safe-r) - 40px) / 15.6), calc(var(--app-h) * 0.125));
+  --meld-tw: calc(var(--hand-tw) * 0.7);
+  /* 手牌の段の高さ（牌の高さ＋選んだ牌が浮く分） */
+  --hand-h: calc(var(--hand-tw) * 1.68 + 4px);
+  /* 卓の一辺：卓の下の 15% に手牌が重なる */
+  --board-s: min(calc((var(--app-h) - var(--hand-h) - 4px) / 0.85), calc(var(--app-h) - 8px));
+  /* 卓の左右の余白 */
+  --gutter: calc((var(--app-w) - var(--board-s)) / 2);
+}
+html.phone-rotated {
+  --safe-l: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-bottom, 0px);
+}
+/* 縦長の画面用の上下の安全領域は使わない */
+html.phone-land .page {
+  padding-top: 10px;
+  padding-bottom: 24px;
+}
+html.phone-land .title {
+  min-height: var(--app-h);
+}
+html.phone-land .game {
+  display: block;
+  position: relative;
+  height: var(--app-h);
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 45%, #173a5c 0%, transparent 65%),
+    var(--bg);
+}
+
+/* 左上：局・供託・残り枚数・ドラ ／ 右上：速さ・終了 */
+html.phone-land .topbar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 16;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: start;
+  gap: 4px 6px;
+  padding: 6px calc(var(--safe-r) + 8px) 0 calc(var(--safe-l) + 8px);
+  background: transparent;
+  border: none;
+  pointer-events: none;
+}
+html.phone-land .topbar > * {
+  pointer-events: auto;
+}
+html.phone-land .topbar__brand {
+  display: none;
+}
+html.phone-land .topbar__round {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  padding: 2px 10px;
+  border-radius: 8px;
+  background: rgb(8 16 30 / 0.78);
+  border: 1px solid rgb(242 193 78 / 0.4);
+  font-size: 0.85rem;
+}
+html.phone-land .topbar__info {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: start;
+  flex-wrap: wrap;
+  max-width: calc(var(--gutter) - var(--safe-l) - 14px);
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgb(8 16 30 / 0.7);
+  font-size: 0.72rem;
+}
+html.phone-land .topbar .tile--mini {
+  --tw: 18px;
+}
+html.phone-land .topbar > .btn {
+  grid-row: 1;
+  min-height: 30px;
+  padding: 2px 12px;
+  font-size: 0.78rem;
+  margin-left: 0;
+  background: rgb(8 16 30 / 0.78);
+}
+/* 音の切り替えは左上（局の情報の下）。右上は卓と重なりやすいので速さ・終了だけにする */
+html.phone-land .topbar > .btn.topbar__sound {
+  grid-column: 1;
+  grid-row: 3;
+  justify-self: start;
+  padding-inline: 10px;
+}
+html.phone-land .topbar__sound-text {
+  display: none;
+}
+html.phone-land .topbar__speed {
+  grid-column: 3;
+}
+html.phone-land .topbar > .btn:last-child {
+  grid-column: 4;
+}
+html.phone-land .save-error {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 17;
+  border-radius: 8px;
+  max-width: calc(var(--app-w) * 0.50);
+}
+
+/* 卓：画面の上から、左右の中央に */
+html.phone-land .table-area {
+  position: absolute;
+  inset: 0;
+  display: block;
+  padding: 0;
+  overflow: visible;
+}
+html.phone-land .board {
+  --S: var(--board-s);
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* 卓の下端は手牌に隠れるので、下側の2人の表示を上げる */
+html.phone-land .player-plate--0,
+html.phone-land .player-plate--1 {
+  bottom: 16cqw;
+}
+
+/* 手牌：画面の下いっぱいに（卓の下端に重ねる） */
+html.phone-land .controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 12;
+  display: block;
+  padding: 0 calc(var(--safe-r) + 8px) 0 calc(var(--safe-l) + 8px);
+  pointer-events: none;
+}
+html.phone-land .hand-row {
+  flex-direction: row;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 0 auto;
+  pointer-events: auto;
+}
+html.phone-land .hand {
+  padding: calc(var(--hand-tw) * 0.3) 4px 2px;
+  background: none;
+  border-radius: 0;
+}
+html.phone-land .hand.is-active {
+  box-shadow: none;
+}
+html.phone-land .my-melds {
+  padding-bottom: 2px;
+}
+html.phone-land .my-melds .melds {
+  gap: 4px;
+}
+
+/* 操作ボタン：手牌の右上に大きく ／ 案内文：手牌の左上に */
+html.phone-land .action-bar {
+  position: absolute;
+  left: calc(var(--safe-l) + 10px);
+  right: calc(var(--safe-r) + 12px);
+  bottom: calc(var(--hand-h) + 4px);
+  width: auto;
+  min-height: 0;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  pointer-events: none;
+}
+html.phone-land .action-bar__status {
+  max-width: calc(var(--gutter) - var(--safe-l) - 16px);
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgb(8 16 30 / 0.7);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+html.phone-land .action-bar__status:empty {
+  display: none;
+}
+html.phone-land .action-bar__buttons {
+  justify-content: flex-end;
+  flex-wrap: wrap-reverse;
+  gap: 6px;
+  max-width: calc(var(--app-w) * 0.60);
+  pointer-events: auto;
+}
+html.phone-land .action-bar .btn {
+  min-width: 78px;
+  min-height: 42px;
+  padding: 4px 14px;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+}
+
+/* AI評価：右上の小さなカード。開くと右側に大きく出す */
+html.phone-land .side {
+  position: absolute;
+  top: 42px;
+  right: calc(var(--safe-r) + 8px);
+  width: max(170px, min(300px, calc(var(--gutter) - var(--safe-r) - 14px)));
+  max-height: calc(var(--app-h) - 42px - var(--hand-h) - 64px);
+  z-index: 14;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgb(17 29 49 / 0.94);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.45);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+html.phone-land .side:has(.eval:not(.is-collapsed)) {
+  top: 6px;
+  width: min(460px, calc(var(--app-w) - var(--safe-r) - var(--safe-l) - 16px), calc(var(--app-w) * 0.62));
+  /* 開いていても手牌は隠さない（読みながら打てるように） */
+  max-height: calc(var(--app-h) - var(--hand-h) - 10px);
+  z-index: 30;
+}
+html.phone-land .eval__handle {
+  cursor: pointer;
+  min-height: 40px;
+  padding: 6px 10px;
+  gap: 6px;
+  position: sticky;
+  top: 0;
+  background: rgb(17 29 49 / 0.98);
+  z-index: 1;
+}
+html.phone-land .eval__title {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+html.phone-land .eval__summary {
+  font-size: 0.8rem;
+}
+html.phone-land .eval__chevron {
+  display: inline;
+  color: var(--muted);
+}
+html.phone-land .eval.is-collapsed .eval__body {
+  display: none;
+}
+html.phone-land .eval.is-collapsed .eval__handle {
+  border-bottom: none;
+}
+html.phone-land .eval__body {
+  padding: 10px 12px 16px;
+}
+
+/* 結果・点数計算テスト：高さが足りないので詰める */
+html.phone-land .modal {
+  padding: 6px calc(var(--safe-r) + 8px) 6px calc(var(--safe-l) + 8px);
+}
+html.phone-land .result-card {
+  max-height: calc(var(--app-h) - 12px);
+  padding: 12px 16px;
+}
+html.phone-land .result-card--quiz {
+  width: 100%;
+}
+html.phone-land .quiz {
+  gap: 12px;
+}
+html.phone-land .quiz__main {
+  gap: 6px;
+}
+html.phone-land .quiz__question {
+  font-size: 0.95rem;
+}
+html.phone-land .score-cell {
+  min-width: 58px;
+  min-height: 23px;
+  font-size: 0.74rem;
+  padding: 1px 4px;
+}
+html.phone-land .score-limits .score-cell {
+  min-width: 116px;
+  min-height: 26px;
+}
+html.phone-land .score-limits {
+  padding-top: 19px;
+}
+
 
 /* 縦長の画面では、点数表を説明の下に置き、満貫以上の欄を表の下に並べる */
 @media (max-width: 899px) and (min-height: 541px), (orientation: portrait) {
-  .quiz {
+  html:not(.phone-land) .quiz {
     grid-template-columns: minmax(0, 1fr);
   }
-  .score-table {
+  html:not(.phone-land) .score-table {
     position: static;
   }
-  .score-table__body {
+  html:not(.phone-land) .score-table__body {
     flex-direction: column;
     align-items: stretch;
   }
-  .score-grid {
+  html:not(.phone-land) .score-grid {
     width: 100%;
     border-spacing: 1px;
   }
-  .score-grid th {
+  html:not(.phone-land) .score-grid th {
     padding: 0 2px;
     font-size: 0.66rem;
   }
-  .score-cell {
+  html:not(.phone-land) .score-cell {
     min-width: 0;
     padding-inline: 1px;
     font-size: 0.68rem;
     letter-spacing: -0.02em;
   }
-  .score-limits {
+  html:not(.phone-land) .score-limits {
     display: grid;
     grid-template-columns: 1fr 1fr;
     padding-top: 0;
   }
-  .score-limits .score-cell {
+  html:not(.phone-land) .score-limits .score-cell {
     min-width: 0;
   }
 }
@@ -2461,120 +2499,181 @@ button {
 }
 
 /* iPhone（横画面）のタイトル：左に設定、右に対戦相手とボタン */
-@media (orientation: landscape) and (max-height: 540px) {
-  .title {
-    padding: 10px calc(env(safe-area-inset-right, 0px) + 12px) 10px calc(env(safe-area-inset-left, 0px) + 12px);
-  }
-  .title__card {
-    width: min(860px, 100%);
-    gap: 8px;
-    padding: 14px 18px;
-  }
-  .title__lead {
-    margin: 0;
-    font-size: 0.85rem;
-  }
-  .title__columns {
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-  }
-  .title__settings,
-  .title__actions {
-    gap: 8px;
-  }
-  .title__brand {
-    font-size: 1.3rem;
-  }
-  .title__tagline {
-    margin: 0;
-  }
-  .field legend {
-    margin-bottom: 2px;
-    font-size: 0.75rem;
-  }
-  .segmented__item {
-    min-height: 32px;
-    padding-block: 2px;
-  }
-  .btn--large {
-    min-height: 42px;
-    font-size: 1rem;
-  }
+/* iPhone の横画面（html.phone-land。縦持ちでも画面ごと回して横画面にする） */
+html.phone-land .title {
+  place-items: stretch;
+  padding: 8px calc(var(--safe-r) + 10px) 8px calc(var(--safe-l) + 10px);
+}
+/* 1画面に収める：見出しは1行、設定は2列、右の列に対戦相手とボタン */
+html.phone-land .title__card {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 6px 14px;
+  padding: 10px 16px;
+}
+html.phone-land .title__brand {
+  font-size: 1.25rem;
+}
+html.phone-land .title__tagline {
+  margin: 0;
+  font-size: 0.85rem;
+}
+html.phone-land .title__lead {
+  display: none;
+}
+html.phone-land .title__columns {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 16px;
+}
+html.phone-land .title__settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  align-content: start;
+}
+html.phone-land .title__actions {
+  gap: 6px;
+}
+html.phone-land .field legend {
+  margin-bottom: 2px;
+  font-size: 0.72rem;
+}
+html.phone-land .segmented__item {
+  flex: 1 1 auto;
+  min-height: 30px;
+  padding: 2px 6px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+/* 対戦相手の説明は設定の下に3列で */
+html.phone-land .opponents {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+html.phone-land .opponents li {
+  flex-direction: column;
+  gap: 0;
+}
+html.phone-land .btn--large {
+  min-height: 38px;
+  font-size: 0.92rem;
+}
+
+/* iPhone（横画面）の弱点分析：2段組みにして縦の長さを抑える（各カードは段をまたがない） */
+html.phone-land .page--analysis {
+  max-width: none;
+  display: block;
+  column-count: 2;
+  column-gap: 14px;
+}
+html.phone-land .page--analysis > * {
+  break-inside: avoid;
+  margin-bottom: 10px;
+}
+html.phone-land .page--analysis > .page__header,
+html.phone-land .page--analysis > .segmented,
+html.phone-land .page--analysis > p,
+html.phone-land .page--analysis > .eval__error {
+  column-span: all;
+}
+html.phone-land .page--analysis > .segmented {
+  width: fit-content;
+}
+html.phone-land .page--analysis .review-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+html.phone-land .page--analysis .review-card__text {
+  flex: none;
+}
+html.phone-land .page--analysis h2 {
+  font-size: 1rem;
+}
+/* 横画面の iPhone の一覧・分析の画面は文字を少し小さくして、1画面に入る量を増やす */
+html.phone-land .page {
+  font-size: 0.86rem;
+  gap: 10px;
+}
+html.phone-land .page__header h1 {
+  font-size: 1.05rem;
+}
+html.phone-land .page .btn {
+  white-space: nowrap;
+}
+html.phone-land .review-card,
+html.phone-land .focus,
+html.phone-land .abilities,
+html.phone-land .flags {
+  padding: 10px 12px;
+}
+
+/* iPhone（横画面）の対局の振り返り：概要を詰め、右の詳細は画面の高さに収めてその中でスクロール */
+html.phone-land .review-summary {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 8px 12px;
+}
+html.phone-land .review-summary p {
+  margin: 0;
+}
+html.phone-land .review-summary .toggle {
+  margin: 0;
+  min-height: 28px;
+  font-size: 0.8rem;
+}
+html.phone-land .review {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 12px;
+}
+/* 判断した局面の手牌は、詳細の列の幅に14枚が入る大きさに */
+html.phone-land .position__hand {
+  --meld-tw: min(30px, calc((var(--app-w) * 0.53 - 60px) / 15));
+}
+html.phone-land .review__detail {
+  position: sticky;
+  top: 8px;
+  max-height: calc(var(--app-h) - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* iPhone（横画面）の復習問題：4人の河を2列に並べ、手牌まで1画面に収める */
-@media (orientation: landscape) and (max-height: 540px) {
-  .page {
-    padding-left: calc(env(safe-area-inset-left, 0px) + 12px);
-    padding-right: calc(env(safe-area-inset-right, 0px) + 12px);
-  }
-  .problem {
-    gap: 6px;
-  }
-  .problem .page__header h1 {
-    font-size: 1rem;
-  }
-  .problem__board {
-    padding: 6px 8px;
-    gap: 4px;
-  }
-  .problem__players {
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
-  }
-  .problem__player {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2px;
-    padding: 3px 6px;
-  }
-  .problem__name {
-    font-size: 0.75rem;
-  }
+/* iPhone の横画面（html.phone-land。縦持ちでも画面ごと回して横画面にする） */
+html.phone-land .page {
+  padding-left: calc(var(--safe-l) + 12px);
+  padding-right: calc(var(--safe-r) + 12px);
+}
+html.phone-land .problem {
+  gap: 6px;
+}
+html.phone-land .problem .page__header h1 {
+  font-size: 1rem;
+}
+html.phone-land .problem__board {
+  padding: 6px 8px;
+  gap: 4px;
+}
+html.phone-land .problem__players {
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+html.phone-land .problem__player {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 3px 6px;
+}
+html.phone-land .problem__name {
+  font-size: 0.75rem;
 }
 
-/* 縦向きの iPhone：対局は横画面で行う */
-.rotate-hint {
-  display: none;
-}
-@media (orientation: portrait) and (max-width: 600px) {
-  .rotate-hint {
-    position: fixed;
-    inset: 0;
-    z-index: 90;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 24px;
-    text-align: center;
-    background:
-      radial-gradient(ellipse at 50% 40%, #173a5c 0%, transparent 70%),
-      var(--bg);
-  }
-  .rotate-hint.is-dismissed {
-    display: none;
-  }
-  .rotate-hint__icon {
-    width: 56px;
-    height: 92px;
-    border: 3px solid var(--accent);
-    border-radius: 12px;
-    animation: rotate-hint 2.4s ease-in-out infinite;
-  }
-  .rotate-hint p {
-    margin: 0;
-    font-weight: 800;
-    line-height: 1.6;
-  }
-}
-@keyframes rotate-hint {
-  0%,
-  25% {
-    transform: rotate(0deg);
-  }
-  55%,
-  100% {
-    transform: rotate(-90deg);
-  }
-}
+

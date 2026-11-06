@@ -50,7 +50,7 @@ export function AnalysisScreen({ onBack, onReview }: { onBack: () => void; onRev
   const mastered = data?.reviews.filter(isMastered).length ?? 0
 
   return (
-    <div className="page">
+    <div className="page page--analysis">
       <header className="page__header">
         <button type="button" className="btn btn--ghost" onClick={onBack}>
           ← 戻る

@@ -154,9 +154,6 @@ export default function App() {
                 }}
               />
             </fieldset>
-          </div>
-
-          <div className="title__actions">
             <ul className="opponents">
               {DEFAULT_OPPONENTS.map((p) => (
                 <li key={p.id}>
@@ -165,7 +162,9 @@ export default function App() {
                 </li>
               ))}
             </ul>
+          </div>
 
+          <div className="title__actions">
             <button
               type="button"
               className="btn btn--riichi btn--large"
