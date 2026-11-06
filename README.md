@@ -36,7 +36,7 @@ npm run dev
 | `src/engine/rules/` | ① ルールエンジン（牌・シャンテン数・和了判定・点数計算） | [phase0-engine-evaluation.md](docs/phase0-engine-evaluation.md) |
 | `src/engine/game/` | 対局進行（配牌〜終局、プレイヤー視点） | [SPEC.md §2-1](docs/SPEC.md) |
 | `src/engine/ai/` | ② AIプレイヤー（性格×強さ） | [ai-player.md](docs/ai-player.md) |
-| `src/engine/evaluator/` | ③ 判断評価エンジン（打牌・鳴き・和了・カン・九種九牌） | [evaluator.md](docs/evaluator.md) |
+| `src/engine/evaluator/` | ③ 判断評価エンジン（打牌・鳴き・和了・カン・九種九牌） | [evaluator.md](docs/evaluator.md)・[nnkr-comparison.md](docs/nnkr-comparison.md)（何切る問題との照合） |
 | `src/engine/calibration/` | 評価・AI の定数（AI 同士の 8,000 半荘で実測） | [calibration.md](docs/calibration.md) |
 | `src/engine/coach/` | ④ 弱点分析・復習問題（判断の分類、5 つの能力値、出題間隔） | [coach.md](docs/coach.md) |
 | `src/ui/` `src/workers/` | 対局画面・評価パネル・履歴・評価 Web Worker | 下記 |

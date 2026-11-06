@@ -10,7 +10,8 @@
  * - 放銃と他家の和了は抽選せず「生き残り確率」を掛けていく（期待値で計算）
  *
  * 自分の打ち方（シミュレーション内の方針）:
- * - 有効牌を引いたら向聴数が最も進む打牌（聴牌に取るときはフリテンにならない待ちを優先）
+ * - 有効牌を引いたら向聴数が最も進む打牌。その中で受け入れ（聴牌なら待ちの残り枚数）が最も多いものを選ぶ
+ *   （聴牌に取るときはフリテンにならない待ちを優先。脅威があるときは安全度がほぼ同じ打牌の中から選ぶ）
  * - 有効牌でなくても、ツモ牌の方が手の中で最も孤立した牌より役立つなら入れ替える（形の改善）
  * - 他家の捨て牌は、向聴数が進み、役（役牌・対々和・断幺九・混一色）の見込みがあれば鳴く
  *   （役牌のポン以外は鳴いた後が2向聴以内のとき。チーは上家の捨て牌だけ。立直中・脅威があって遠いときは鳴かない）
@@ -111,6 +112,9 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
   const allowCalls = setup.allowCalls !== false
   const yakuhai = new Set<TileKind>([31, 32, 33, seatWindOf(setup.view), setup.view.round.wind])
   const need = setup.ownTurns * 4
+  const poolCount = new Int8Array(KIND_COUNT)
+  for (const k of setup.pool) poolCount[k]++
+  const effCache = effectiveCacheOf(setup)
 
   for (let i = 0; i < n; i++) {
     const rng = createRng(seed + i * 7919)
@@ -125,6 +129,8 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
     }
 
     const c = cand.counts.slice()
+    // 残り枚数の目安（見えていない枚数 − この試行で自分が引いた分）
+    const avail = (k: TileKind) => Math.max(0, poolCount[k] + cand.counts[k] - c[k])
     // 鳴きで変わる副露の状態（試行ごとに初期化）
     let melds = initialMelds
     let meldCount = melds.length
@@ -170,17 +176,22 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
         c[opt.remove[0]]--
         c[opt.remove[1]]--
         let sBest = 99
-        let dBest = -1
+        let ties: TileKind[] = []
         for (let d = 0; d < KIND_COUNT; d++) {
           if (c[d] === 0 || d === x) continue // 喰い替え（同じ牌）は不可
           c[d]--
           const sh = fastShanten(c, meldCount + 1)
           c[d]++
-          if (sh < sBest || (sh === sBest && setup.dealInProb[d] < setup.dealInProb[dBest])) {
+          if (sh < sBest) {
             sBest = sh
-            dBest = d
-          }
+            ties = [d]
+          } else if (sh === sBest) ties.push(d)
         }
+        // 鳴いた後の打牌も、向聴数が同じなら受け入れの多いもの（ツモのときと同じ選び方）
+        const dBest =
+          ties.length === 0
+            ? -1
+            : chooseAdvance(c, ties, sBest, meldCount + 1, setup.dealInProb, avail, furiten, effCache)
         const ok =
           dBest >= 0 &&
           sBest < shanten &&
@@ -289,12 +300,7 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
               if (fastShanten(c, meldCount) === s14) options.push(k)
               c[k]++
             }
-            options.sort((a, b) => setup.dealInProb[a] - setup.dealInProb[b])
-            discard = options[0]
-            if (s14 === 0) {
-              const fresh = options.find((k) => !makesFuriten(c, k, furiten, meldCount))
-              if (fresh !== undefined) discard = fresh
-            }
+            discard = chooseAdvance(c, options, s14, meldCount, setup.dealInProb, avail, furiten, effCache)
             shanten = s14
           } else if (s14 >= 0 && shanten > 0) {
             // 形の改善：ツモ牌の方が、手の中で最も孤立した牌より役に立つなら入れ替える（向聴数が戻らない場合のみ）
@@ -353,6 +359,106 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
     winValue: winSum > 0 ? winValueSum / winSum : 0,
     dealInRate: dealInSum / n,
   }
+}
+
+/** 安全度の差がこの範囲なら「同じくらい安全」とみなし、受け入れの広さで選ぶ */
+const SAFETY_TOLERANCE = 0.02
+const YAOCHU: TileKind[] = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33]
+
+/**
+ * 向聴数が進むツモのあとの打牌を選ぶ（14枚の c から切る牌）。
+ * 安全度がほぼ同じ打牌の中から、受け入れ（聴牌なら待ちの残り枚数）が最も多いものを選ぶ
+ * （2向聴以上に進んだときは計算を軽くするため、最も孤立した牌を選ぶ）。
+ * 聴牌に取るときは、フリテンにならない打牌を優先する。
+ */
+function chooseAdvance(
+  c: number[],
+  options: TileKind[],
+  s14: number,
+  meldCount: number,
+  dealInProb: Float64Array,
+  avail: (k: TileKind) => number,
+  furiten: Set<TileKind>,
+  cache: Map<string, TileKind[]>,
+): TileKind {
+  let pool = options
+  if (s14 === 0) {
+    const fresh = options.filter((k) => !makesFuriten(c, k, furiten, meldCount))
+    if (fresh.length > 0) pool = fresh
+  }
+  if (pool.length === 1) return pool[0]
+  let safest = Infinity
+  for (const k of pool) safest = Math.min(safest, dealInProb[k])
+  let best = pool[0]
+  if (s14 >= 2) {
+    // 2向聴以上は受け入れを数えず、最も孤立した牌を切る（計算を軽くするため）
+    let bestU = Infinity
+    for (const k of pool) {
+      if (dealInProb[k] > safest + SAFETY_TOLERANCE) continue
+      const u = usefulness(c, k) + dealInProb[k]
+      if (u < bestU) {
+        bestU = u
+        best = k
+      }
+    }
+    return best
+  }
+  let bestScore = -Infinity
+  for (const k of pool) {
+    if (dealInProb[k] > safest + SAFETY_TOLERANCE) continue
+    c[k]--
+    let u = 0
+    for (const w of effectiveKinds(c, s14, meldCount, cache)) u += avail(w)
+    c[k]++
+    // 同じ受け入れなら安全な方
+    const score = u - dealInProb[k]
+    if (score > bestScore) {
+      bestScore = score
+      best = k
+    }
+  }
+  return best
+}
+
+const EFFECTIVE_CACHE_LIMIT = 200_000
+const effectiveCaches = new WeakMap<SimSetup, Map<string, TileKind[]>>()
+/** 同じ局面の候補どうしで共有する（形だけで決まるので局面をまたいでも正しいが、メモリを抑えるため局面ごと） */
+function effectiveCacheOf(setup: SimSetup): Map<string, TileKind[]> {
+  let m = effectiveCaches.get(setup)
+  if (!m) effectiveCaches.set(setup, (m = new Map()))
+  return m
+}
+
+/**
+ * 3n+1枚の手 c（向聴数 s）で、引くと向聴数が進む牌の種類。
+ * 同じ乱数列を全候補で使うので同じ形が何度も出る。形ごとに覚えておく。
+ */
+function effectiveKinds(c: number[], s: number, meldCount: number, cache: Map<string, TileKind[]>): TileKind[] {
+  const key = c.join('') + meldCount
+  const hit = cache.get(key)
+  if (hit) return hit
+  // 向聴数を進めうる牌だけ調べる：手にある牌と、その同じ色の2つ以内の牌
+  // （それ以外の牌は孤立した浮き牌にしかならない。国士無双は么九牌を足す）
+  const near = new Uint8Array(KIND_COUNT)
+  for (let k = 0; k < KIND_COUNT; k++) {
+    if (c[k] === 0) continue
+    near[k] = 1
+    if (k < 27) {
+      const r = k % 9
+      for (let d = -2; d <= 2; d++) if (r + d >= 0 && r + d <= 8) near[k + d] = 1
+    }
+  }
+  if (meldCount === 0 && kokushiShanten(c) <= s + 1) for (const k of YAOCHU) near[k] = 1
+  const out: TileKind[] = []
+  for (let w = 0; w < KIND_COUNT; w++) {
+    if (!near[w] || c[w] >= 4) continue
+    c[w]++
+    if (fastShanten(c, meldCount) < s) out.push(w)
+    c[w]--
+  }
+  if (cache.size >= EFFECTIVE_CACHE_LIMIT) cache.clear()
+  cache.set(key, out)
+  return out
 }
 
 /** 試行番号と山の位置から決まる 0〜1 の値（候補が違っても同じ） */

@@ -42,7 +42,7 @@ import {
  * 鳴き・和了など候補が少ない判断：最善の期待値の大きさも考慮する。
  * 損失が尺度と同じとき約37点、尺度の半分で約61点。
  */
-const SCALE_MIN = 120
+const SCALE_MIN = 500
 const SCALE_MAX = 1000
 /** 鳴いた後の打牌は、向聴数・受け入れの上位この数だけシミュレーションする */
 const CALL_DISCARD_VARIANTS = 3

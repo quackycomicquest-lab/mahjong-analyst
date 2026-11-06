@@ -25,12 +25,12 @@ function show(title: string, spec: ViewSpec, choose: string, opts: { riichi?: bo
   }
 }
 
-show('仕様§3-1の例', { hand: '123456m2345p78s11z' }, '1z')
-show('仕様§3-1の例（最善）', { hand: '123456m2345p78s11z' }, '2p')
+show('仕様§3-1の例', { hand: '123456m2345p78s11z', riichiAllowed: true }, '1z')
+show('仕様§3-1の例（最善）', { hand: '123456m2345p78s11z', riichiAllowed: true }, '2p', { riichi: true })
 show('両面を崩す', { hand: '23m456p789s1357z36s' }, '2m')
 show('立直者に対して遠い手', { hand: '45m79m24p68p159s136z', rivers: { 2: ['2z', '5m*'] } }, '1z')
 show('役なし聴牌：立直', { hand: '123m456p789s24s99m1z', riichiAllowed: true }, '1z', { riichi: true })
 show('役なし聴牌：ダマ', { hand: '123m456p789s24s99m1z', riichiAllowed: true }, '1z')
-show('軽量モード（iPhone想定）', { hand: '123456m2345p78s11z' }, '1z', { mode: 'light' })
+show('軽量モード（iPhone想定）', { hand: '123456m2345p78s11z', riichiAllowed: true }, '1z', { mode: 'light' })
 show('役なし両面聴牌：立直', { hand: '123m456p999m23s55s1z', riichiAllowed: true }, '1z', { riichi: true })
 show('ドラ1・役なし両面：立直', { hand: '123m456p999m23s55s1z', riichiAllowed: true, dora: '4s' }, '1z', { riichi: true })
