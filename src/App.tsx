@@ -5,6 +5,7 @@ import { AnalysisScreen, type ReviewRequest } from './ui/AnalysisScreen'
 import { GameScreen } from './ui/GameScreen'
 import { HistoryScreen } from './ui/HistoryScreen'
 import { ReviewScreen } from './ui/ReviewScreen'
+import { SOUND_LABELS, unlockAudio } from './ui/sound'
 import { AI_SPEED_LABELS, useGame, type GameSettings } from './ui/useGame'
 
 const STORAGE_KEY = 'mahjong-analyst:settings'
@@ -36,6 +37,7 @@ export default function App() {
   }, [screen])
 
   const resume = async (record: GameRecord) => {
+    unlockAudio()
     const stored = await listEvaluations(record.id).catch(() => [])
     handle.resume(record, stored)
     setScreen('game')
@@ -57,6 +59,8 @@ export default function App() {
         handle={handle}
         aiSpeed={settings.aiSpeed}
         onSpeedChange={(aiSpeed) => update({ aiSpeed })}
+        sound={settings.sound ?? 'all'}
+        onSoundChange={(sound) => update({ sound })}
         onQuit={() => setScreen('title')}
       />
     )
@@ -137,6 +141,17 @@ export default function App() {
                 value={settings.aiSpeed}
                 options={AI_SPEED_LABELS}
                 onChange={(v) => update({ aiSpeed: v as GameSettings['aiSpeed'] })}
+              />
+            </fieldset>
+            <fieldset className="field">
+              <legend>打牌音・発声（リーチ・ポンなど）</legend>
+              <Segmented
+                value={settings.sound ?? 'all'}
+                options={SOUND_LABELS}
+                onChange={(v) => {
+                  unlockAudio()
+                  update({ sound: v as GameSettings['sound'] })
+                }}
               />
             </fieldset>
           </div>

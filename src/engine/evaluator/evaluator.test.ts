@@ -5,7 +5,7 @@ import type { Action } from '../game/types'
 import { getPlayerView, type PlayerView } from '../game/view'
 import { kindName, parseHand } from '../rules/tile'
 import { makeView } from '../testing/makeView'
-import { evaluateDecision } from './evaluate'
+import { evaluateDecision, furitenWaits } from './evaluate'
 
 const discard = (view: PlayerView, notation: string, riichi = false): Action => {
   const k = parseHand(notation)[0].kind
@@ -198,5 +198,16 @@ describe('鳴き・和了・九種九牌・立直判断の評価', () => {
     const e = evaluateDecision(view, discard(view, '1z', true), opts)
     expect(e.analysis.riichi).toMatchObject({ tile: '東', recommended: 'riichi', chosen: 'riichi' })
     expect(e.good.join()).toContain('立直判断は適切')
+  })
+
+  it('将来の待ちが自分の河にあると、その聴牌はロンできず和了率が大きく下がる（フリテン）', () => {
+    const k = parseHand('1z')[0].kind
+    const clean = makeView({ hand: '123m567p678s34s99p1z', rivers: { 0: ['9m'] } })
+    const furiten = makeView({ hand: '123m567p678s34s99p1z', rivers: { 0: ['2s'] } })
+    expect(furitenWaits(clean, k)).toEqual([])
+    expect(furitenWaits(furiten, k).map(kindName)).toEqual(['2索'])
+    const a = evaluateDecision(clean, discard(clean, '1z'), opts).candidates.find((c) => c.label === '東')!
+    const b = evaluateDecision(furiten, discard(furiten, '1z'), opts).candidates.find((c) => c.label === '東')!
+    expect(b.winRate).toBeLessThan(a.winRate * 0.6)
   })
 })

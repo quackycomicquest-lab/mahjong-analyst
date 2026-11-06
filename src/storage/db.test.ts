@@ -8,6 +8,9 @@ import { buildGameRecord, type EvalEntry, type PlayerInfo } from '../ui/useGame'
 import {
   closeDb,
   DB_NAME,
+  deleteFlag,
+  listFlags,
+  saveFlag,
   getGame,
   latestUnfinishedGame,
   listEvaluations,
@@ -121,5 +124,17 @@ describe('打牌評価の保存（仕様 §3-4）', () => {
     const rec = buildGameRecord(game, { id: 'g', startedAt: 'x', settings }, players, entries)
     expect(rec.summary.evaluated).toBe(3)
     expect(rec.summary.averageScore).not.toBeNull()
+  })
+
+  it('要検証の印を保存・更新・削除できる（新しい順）', async () => {
+    const base = { reasons: ['tooLow' as const], note: '', createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z' }
+    await saveFlag({ ...base, gameId: 'g', decisionId: 1 })
+    await saveFlag({ ...base, gameId: 'g', decisionId: 2, createdAt: '2026-11-02T00:00:00Z' })
+    await saveFlag({ ...base, gameId: 'g', decisionId: 1, note: '両面より打点では？' })
+    const flags = await listFlags()
+    expect(flags.map((f) => f.decisionId)).toEqual([2, 1])
+    expect(flags[1].note).toBe('両面より打点では？')
+    await deleteFlag('g', 2)
+    expect((await listFlags()).map((f) => f.decisionId)).toEqual([1])
   })
 })

@@ -26,6 +26,7 @@ import {
 } from '../storage/db'
 import { actionLabel, roundLabel } from './labels'
 import { defaultEvaluationMode, requestEvaluation } from './evaluatorClient'
+import { playActionSound, unlockAudio } from './sound'
 
 export const HUMAN: Seat = 0
 
@@ -96,6 +97,11 @@ export function useGame(prefs: GameSettings) {
   /** この対局の点数計算テストの結果 */
   const [quizLog, setQuizLog] = useState<QuizRecord[]>([])
   const bump = useCallback(() => setVersion((v) => v + 1), [])
+  // 音の設定は対局中でも切り替えられる（AI の行動のタイマーを作り直さないよう ref で読む）
+  const soundRef = useRef(prefs.sound ?? 'all')
+  useEffect(() => {
+    soundRef.current = prefs.sound ?? 'all'
+  }, [prefs.sound])
 
   const strength = session?.settings.strength ?? prefs.strength
   const players = useMemo(() => makePlayers(strength), [strength])
@@ -109,6 +115,7 @@ export function useGame(prefs: GameSettings) {
   const start = useCallback(() => {
     const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0
     const settings = { ...prefs }
+    unlockAudio()
     setupBots(seed, makePlayers(settings.strength))
     setSession({ id: newId(), startedAt: new Date().toISOString(), settings })
     setGame(new MahjongGame({ seed, config: { length: settings.length } }))
@@ -120,6 +127,7 @@ export function useGame(prefs: GameSettings) {
   /** 保存した対局を、seed と行動列から再現して続きから打つ */
   const resume = useCallback(
     (record: GameRecord, stored: StoredEvaluation[]) => {
+      unlockAudio()
       const g = MahjongGame.replay({ seed: record.seed, config: { length: record.settings.length } }, record.actions)
       setupBots(record.seed + record.actions.length, makePlayers(record.settings.strength))
       setSession({ id: record.id, startedAt: record.startedAt, settings: record.settings })
@@ -152,7 +160,9 @@ export function useGame(prefs: GameSettings) {
       () => {
         for (const s of aiSeats) {
           if (!g.pendingSeats().includes(s)) continue
-          g.apply(botsRef.current[s](getPlayerView(g, s)))
+          const a = botsRef.current[s](getPlayerView(g, s))
+          g.apply(a)
+          playActionSound(a, soundRef.current)
         }
         bump()
       },
@@ -211,7 +221,9 @@ export function useGame(prefs: GameSettings) {
             setEvals((prev) => prev.map((e) => (e.decisionId === entry.decisionId ? { ...e, error: err.message } : e))),
         )
       }
+      unlockAudio()
       g.apply(action)
+      playActionSound(action, soundRef.current)
       bump()
     },
     [game, session, prefs.evalMode, bump],

@@ -6,6 +6,7 @@
  * - evaluations  : 自分の判断1件 = 判断直前の局面スナップショット＋実際の行動＋評価結果（仕様 §3-4）
  * - reviews      : 復習問題1件 = どの判断を、次にいつ出題するか（仕様 §7-3）
  * - quizzes      : 点数計算テスト1問の結果
+ * - flags        : 評価に疑問が残る判断につけた「要検証」の印（理由・メモ・まとめて再評価した結果）
  *
  * 保存に失敗しても（プライベートブラウズなど）対局は続けられるよう、呼び出し側は例外を握りつぶしてよい。
  */
@@ -14,7 +15,7 @@ import type { EvaluationRecord } from '../engine/evaluator/types'
 import type { Action, GameResult } from '../engine/game/types'
 
 export const DB_NAME = 'mahjong-analyst'
-export const DB_VERSION = 3
+export const DB_VERSION = 4
 
 export interface StoredSettings {
   length: 'tonpuu' | 'hanchan'
@@ -23,6 +24,44 @@ export interface StoredSettings {
   aiSpeed: 'fast' | 'normal' | 'slow'
   /** 和了の局の終わりに点数計算テストを出す（古い保存データには無いので省略可） */
   scoreQuiz?: boolean
+  /** 効果音と発声（古い保存データには無いので省略可。既定は「効果音＋発声」） */
+  sound?: 'all' | 'se' | 'off'
+}
+
+/** 「要検証」の理由 */
+export type FlagReason = 'tooLow' | 'tooHigh' | 'bestDoubt' | 'other'
+
+export const FLAG_REASONS: [FlagReason, string][] = [
+  ['tooLow', '点数が低すぎる'],
+  ['tooHigh', '点数が高すぎる'],
+  ['bestDoubt', '最善手が疑問'],
+  ['other', 'その他'],
+]
+
+/** まとめて再評価した結果（試行回数を増やし、乱数を変えて複数回） */
+export interface FlagVerification {
+  at: string
+  engineVersion: string
+  simulations: number
+  /** 回ごとの評価点 */
+  scores: number[]
+  /** 回ごとの最善手 */
+  bestLabels: string[]
+  /** 回ごとの判断損失 */
+  losses: number[]
+}
+
+/** 要検証の印の識別子（画面で使う） */
+export const flagKey = (gameId: string, decisionId: number) => `${gameId}:${decisionId}`
+
+export interface FlagRecord {
+  gameId: string
+  decisionId: number
+  reasons: FlagReason[]
+  note: string
+  createdAt: string
+  updatedAt: string
+  verification?: FlagVerification
 }
 
 export interface QuizRecord {
@@ -99,6 +138,10 @@ export function openDb(): Promise<IDBDatabase> {
         const quizzes = db.createObjectStore('quizzes', { keyPath: 'id' })
         quizzes.createIndex('gameId', 'gameId')
       }
+      // v4：要検証の印
+      if (!db.objectStoreNames.contains('flags')) {
+        db.createObjectStore('flags', { keyPath: ['gameId', 'decisionId'] })
+      }
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
@@ -123,7 +166,7 @@ function request<T>(req: IDBRequest<T>): Promise<T> {
 }
 
 async function store(
-  name: 'games' | 'evaluations' | 'reviews' | 'quizzes',
+  name: 'games' | 'evaluations' | 'reviews' | 'quizzes' | 'flags',
   mode: IDBTransactionMode,
 ): Promise<IDBObjectStore> {
   const db = await openDb()
@@ -191,4 +234,17 @@ export async function saveQuizResult(record: QuizRecord): Promise<void> {
 
 export async function listQuizzes(): Promise<QuizRecord[]> {
   return (await request((await store('quizzes', 'readonly')).getAll())) as QuizRecord[]
+}
+
+export async function saveFlag(record: FlagRecord): Promise<void> {
+  await request((await store('flags', 'readwrite')).put(record))
+}
+
+export async function deleteFlag(gameId: string, decisionId: number): Promise<void> {
+  await request((await store('flags', 'readwrite')).delete([gameId, decisionId]))
+}
+
+export async function listFlags(): Promise<FlagRecord[]> {
+  const all = (await request((await store('flags', 'readonly')).getAll())) as FlagRecord[]
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }

@@ -35,12 +35,17 @@ export function defaultEvaluationMode(): EvaluationMode {
   return /iPhone|iPad|iPod|Android/i.test(ua) ? 'light' : 'full'
 }
 
-export function requestEvaluation(view: PlayerView, action: Action, mode: EvaluationMode): Promise<Evaluation> {
+export function requestEvaluation(
+  view: PlayerView,
+  action: Action,
+  mode: EvaluationMode,
+  extra: { simulations?: number; seed?: number } = {},
+): Promise<Evaluation> {
   const w = getWorker()
-  if (!w) return Promise.resolve(evaluateDecision(view, action, { mode }))
+  if (!w) return Promise.resolve(evaluateDecision(view, action, { mode, ...extra }))
   const id = ++seq
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject })
-    w.postMessage({ id, view, action, mode })
+    w.postMessage({ id, view, action, mode, ...extra })
   })
 }

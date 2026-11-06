@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import type { CandidateEvaluation, Evaluation } from '../engine/evaluator/types'
 import { kindName } from '../engine/rules/tile'
-import { DECISION_NAMES, pct, scoreGrade } from './labels'
+import { DECISION_NAMES, pct, scoreGrade, signed } from './labels'
 import type { EvalEntry, PlayerInfo } from './useGame'
 
 interface Props {
@@ -120,6 +120,15 @@ export function EvaluationDetail({
           <div className="eval__loss">
             判断損失 {ev.loss === 0 ? 'なし' : `−${ev.loss}点`}
             {ev.loss !== 0 && <span className="muted">（誤差 ±{ev.lossStdError}点）</span>}
+          </div>
+          {/* 局収支：この局が終わるまでの点数の増減の期待値（和了・放銃・聴牌料・立直棒を含む） */}
+          <div className="eval__balance" title="この判断からこの局の終わりまでの、点数の増減の見込み（和了・放銃・流局時の聴牌料・立直棒を含む）">
+            局収支の見込み　最善 <b className={balanceTone(best.ev)}>{pts(best.ev)}</b>
+            {chosen !== best && chosen.label !== best.label && (
+              <>
+                {' '}／ あなた <b className={balanceTone(chosen.ev)}>{pts(chosen.ev)}</b>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -265,4 +274,14 @@ function Level3({ ev, players }: { ev: Evaluation; players: PlayerInfo[] }) {
       </dd>
     </dl>
   )
+}
+
+/** 局収支の表示（+1,234点 / −560点） */
+function pts(n: number): string {
+  const r = Math.round(n)
+  return r === 0 ? '±0点' : `${signed(r).replace('-', '−').replace(/\d+/, (d) => Number(d).toLocaleString())}点`
+}
+
+function balanceTone(n: number): string {
+  return n > 0 ? 'balance--plus' : n < 0 ? 'balance--minus' : ''
 }

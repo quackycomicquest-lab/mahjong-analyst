@@ -15,6 +15,7 @@ import {
 import { CATEGORY_DESCRIPTIONS, type Category } from '../engine/coach/classify'
 import { isDue, isMastered, type ReviewItem } from '../engine/coach/review'
 import { loadCoachData, type CoachData } from './coachData'
+import { FlagsSection } from './FlagsSection'
 import { scoreGrade } from './labels'
 
 const PERIODS = [
@@ -75,6 +76,8 @@ export function AnalysisScreen({ onBack, onReview }: { onBack: () => void; onRev
           </button>
         </section>
       )}
+
+      {data && <FlagsSection games={data.games} />}
 
       {view && data && (
         <>

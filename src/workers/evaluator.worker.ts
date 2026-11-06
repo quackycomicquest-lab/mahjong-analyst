@@ -11,12 +11,15 @@ export interface EvaluateRequest {
   view: PlayerView
   action: Action
   mode: EvaluationMode
+  /** 要検証の再評価などで、試行回数・乱数を変えるとき */
+  simulations?: number
+  seed?: number
 }
 
 self.onmessage = (e: MessageEvent<EvaluateRequest>) => {
-  const { id, view, action, mode } = e.data
+  const { id, view, action, mode, simulations, seed } = e.data
   try {
-    const evaluation = evaluateDecision(view, action, { mode })
+    const evaluation = evaluateDecision(view, action, { mode, simulations, seed })
     self.postMessage({ id, evaluation })
   } catch (err) {
     self.postMessage({ id, error: String(err) })

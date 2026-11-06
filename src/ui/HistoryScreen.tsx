@@ -2,9 +2,10 @@
  * 対局履歴と打牌の振り返り（仕様 §3-4, §7）
  */
 import { useEffect, useState } from 'react'
-import { listEvaluations, listGames, type GameRecord, type StoredEvaluation } from '../storage/db'
+import { flagKey, listEvaluations, listFlags, listGames, type FlagRecord, type GameRecord, type StoredEvaluation } from '../storage/db'
 import type { Seat } from '../engine/game/types'
 import { EvaluationDetail } from './EvaluationPanel'
+import { FlagEditor } from './FlagEditor'
 import { Tile } from './Tile'
 import { scoreGrade } from './labels'
 import type { PlayerInfo } from './useGame'
@@ -74,13 +75,22 @@ function GameReview({
   const [current, setCurrent] = useState<StoredEvaluation | null>(null)
   const [level, setLevel] = useState<1 | 2 | 3>(1)
   const [onlyMistakes, setOnlyMistakes] = useState(false)
+  const [onlyFlagged, setOnlyFlagged] = useState(false)
+  const [flags, setFlags] = useState<Map<string, FlagRecord>>(new Map())
 
   useEffect(() => {
     listEvaluations(game.id).then(setRecords, () => setRecords([]))
+    listFlags().then(
+      (fs) => setFlags(new Map(fs.filter((f) => f.gameId === game.id).map((f) => [flagKey(f.gameId, f.decisionId), f]))),
+      () => {},
+    )
   }, [game.id])
+  const flagOf = (r: StoredEvaluation) => flags.get(flagKey(r.gameId, r.decisionId)) ?? null
 
   const players: PlayerInfo[] = game.playerNames.map((name, seat) => ({ seat: seat as Seat, name, profile: null }))
-  const shown = (records ?? []).filter((r) => !onlyMistakes || (r.evaluation.score ?? 100) < 70)
+  const shown = (records ?? []).filter(
+    (r) => (!onlyMistakes || (r.evaluation.score ?? 100) < 70) && (!onlyFlagged || flagOf(r) !== null),
+  )
   const rounds = [...new Set(shown.map((r) => r.roundLabel))]
 
   return (
@@ -122,6 +132,10 @@ function GameReview({
           <input type="checkbox" checked={onlyMistakes} onChange={(e) => setOnlyMistakes(e.target.checked)} />
           70点未満の判断だけ表示
         </label>
+        <label className="toggle">
+          <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
+          要検証（⚑）の判断だけ表示（{flags.size}件）
+        </label>
       </section>
 
       <div className="review">
@@ -143,6 +157,7 @@ function GameReview({
                         className={`chip chip--${s == null ? 'none' : scoreGrade(s).tone} ${current === r ? 'is-current' : ''}`}
                         onClick={() => setCurrent(r)}
                       >
+                        {flagOf(r) && <span aria-label="要検証">⚑ </span>}
                         {r.label} {s ?? '—'}
                       </button>
                     )
@@ -156,6 +171,21 @@ function GameReview({
           {current ? (
             <>
               <Position record={current} />
+              <FlagEditor
+                key={flagKey(current.gameId, current.decisionId)}
+                gameId={current.gameId}
+                decisionId={current.decisionId}
+                flag={flagOf(current)}
+                onChange={(f) =>
+                  setFlags((m) => {
+                    const next = new Map(m)
+                    const k = flagKey(current.gameId, current.decisionId)
+                    if (f) next.set(k, f)
+                    else next.delete(k)
+                    return next
+                  })
+                }
+              />
               <EvaluationDetail ev={current.evaluation} label={current.label} players={players} level={level} setLevel={setLevel} />
             </>
           ) : (

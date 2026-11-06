@@ -12,6 +12,7 @@ import { Tile } from './Tile'
 import { EvaluationPanel } from './EvaluationPanel'
 import { GameResultModal, RoundResultModal } from './ResultModal'
 import { roundLabel } from './labels'
+import { SOUND_LABELS, unlockAudio, type SoundSetting } from './sound'
 import { AI_SPEED_LABELS, type GameSettings, type useGame } from './useGame'
 
 type GameHandle = ReturnType<typeof useGame>
@@ -20,11 +21,15 @@ export function GameScreen({
   handle,
   aiSpeed,
   onSpeedChange,
+  sound,
+  onSoundChange,
   onQuit,
 }: {
   handle: GameHandle
   aiSpeed: GameSettings['aiSpeed']
   onSpeedChange: (s: GameSettings['aiSpeed']) => void
+  sound: SoundSetting
+  onSoundChange: (s: SoundSetting) => void
   onQuit: () => void
 }) {
   const { game, view, players, evals, act, start, saveError, quizEnabled, recordQuiz, quizLog } = handle
@@ -57,6 +62,19 @@ export function GameScreen({
             ))}
           </span>
         </span>
+        <button
+          type="button"
+          className="btn btn--ghost topbar__sound"
+          title="打牌音・発声を切り替える（効果音＋発声→効果音だけ→なし）"
+          onClick={() => {
+            unlockAudio()
+            const i = SOUND_LABELS.findIndex(([v]) => v === sound)
+            onSoundChange(SOUND_LABELS[(i + 1) % SOUND_LABELS.length][0])
+          }}
+        >
+          <span aria-hidden>{sound === 'all' ? '🔊' : sound === 'se' ? '🔉' : '🔇'}</span>
+          <span className="topbar__sound-text">{sound === 'all' ? ' 音声' : sound === 'se' ? ' 効果音' : ' 音なし'}</span>
+        </button>
         <button
           type="button"
           className="btn btn--ghost topbar__speed"

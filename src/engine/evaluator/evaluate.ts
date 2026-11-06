@@ -23,6 +23,7 @@ import type { Action, CalledMeld, Seat } from '../game/types'
 import type { PlayerView } from '../game/view'
 import { ukeire as calcUkeire } from '../rules/efficiency'
 import { calculateHandValue } from '../rules/score'
+import { waitingKinds } from '../rules/agari'
 import { calculateShanten } from '../rules/shanten'
 import { countsOfTiles, kindName, KIND_COUNT, type PhysicalTile, type TileKind } from '../rules/tile'
 import type { Meld } from '../rules/types'
@@ -172,7 +173,7 @@ export function evaluateDecision(
   const riichi = riichiAnalysis(chosen, results)
   const { good, improve } =
     decision === 'discard'
-      ? comment(chosen.ev, best.ev, results.map((r) => r.ev), safest, loss, diffSE)
+      ? comment(chosen.ev, best.ev, results.map((r) => r.ev), safest, loss, diffSE, (k) => furitenWaits(view, k))
       : commentOther(chosen, best, loss, diffSE)
   if (riichi && riichi.recommended === riichi.chosen && riichi.riichiEv !== riichi.damaEv) {
     good.push(
@@ -510,6 +511,23 @@ function runSpec(spec: CandSpec, setup: SimSetup, seen: number[], n: number, see
 // ---------------------------------------------------------------------------
 // 準備
 
+const ALL_KINDS: TileKind[] = Array.from({ length: KIND_COUNT }, (_, k) => k)
+
+/**
+ * 打牌して聴牌に取ったとき、自分の河（と今切る牌）にある待ち。空ならフリテンではない
+ * （同巡内フリテンは次の自分の打牌で解けるので、打牌の評価では見ない）
+ */
+export function furitenWaits(view: PlayerView, kind: TileKind): TileKind[] {
+  const me = view.players[view.seat]
+  const counts = countsOfTiles(view.hand)
+  if (counts[kind] === 0) return []
+  counts[kind]--
+  const waits = waitingKinds(counts, me.melds.length)
+  const river = new Set(me.river.map((r) => r.tile.kind))
+  river.add(kind)
+  return waits.filter((w) => river.has(w))
+}
+
 export function buildSetup(view: PlayerView): SimSetup {
   const me = view.players[view.seat]
   const seen = seenCounts(view)
@@ -545,7 +563,8 @@ export function buildSetup(view: PlayerView): SimSetup {
     hasThreat: threats.length > 0,
     futureDealIn: futureDealInSeq(view.wallRemaining, threats.length > 0),
     futureDealInLoss: futureDealIn(view.wallRemaining, threats.length > 0).loss,
-    riverKinds: me.river.map((r) => r.tile.kind),
+    // 立直後に当たり牌を見逃したフリテン（その局ずっとロンできない）は、全ての牌を河にあるものとして扱う
+    riverKinds: me.riichi && view.isFuriten ? ALL_KINDS : me.river.map((r) => r.tile.kind),
     kyoutaku: view.round.kyoutaku,
     honba: view.round.honba,
   }
@@ -596,10 +615,19 @@ function comment(
   safest: CandidateEvaluation | null,
   loss: number,
   diffSE: number,
+  furitenOf: (kind: TileKind) => TileKind[],
 ): { good: string[]; improve: string[] } {
   const good: string[] = []
   const improve: string[] = []
   const nearBest = chosen === best || loss <= diffSE
+  // フリテンの聴牌（待ちが自分の河にあり、ロンできない）
+  const furiten = chosen.shanten === 0 && chosen.kind !== null ? furitenOf(chosen.kind) : []
+  const bestFuriten = best.shanten === 0 && best.kind !== null && furitenOf(best.kind).length > 0
+  if (furiten.length > 0 && !bestFuriten && chosen.kind !== best.kind) {
+    improve.push(
+      `フリテンの聴牌です（待ちの${furiten.map(kindName).join('・')}が自分の河にあるためロンできず、ツモ和了だけになります）`,
+    )
+  }
   if (chosen === best) good.push('最善手を選べています')
   else if (nearBest) good.push(`最善手（${best.label}）との差は誤差の範囲です`)
 

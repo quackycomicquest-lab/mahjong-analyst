@@ -8,6 +8,7 @@ import { abilities, categoryStats, filterByRecentGames, weakestCategory, type Sc
 import { classifyDecision, isAllLast } from './classify'
 import { enroll, isDue, isMastered, pickPractice, pickSession, schedule } from './review'
 import { actualCellId, allCells, answerLabel, basePayment, paymentLabel, scoreTable, scoreTableFor } from './scoreQuiz'
+import { summarizeVerification } from './flags'
 import type { HandValue } from '../rules/score'
 
 const discard = (view: PlayerView, n: string, riichi = false): Action =>
@@ -173,5 +174,26 @@ describe('点数計算テスト', () => {
     expect(allCells(t).find((c) => c.id === actualCellId(value))!.label).toBe(answerLabel(value, false))
     // 110符を超える和了は行を足す
     expect(scoreTable(false, false, 130).fuRows.at(-1)).toBe(130)
+  })
+})
+
+describe('要検証の再評価', () => {
+  const v = (scores: number[], bestLabels: string[]) => ({
+    at: '',
+    engineVersion: 'x',
+    simulations: 1200,
+    scores,
+    bestLabels,
+    losses: scores.map(() => 0),
+  })
+  it('再評価しても点数と最善手が同じなら stable', () => {
+    expect(summarizeVerification(50, '1索', v([48, 52, 55], ['1索', '1索', '1索']))).toMatchObject({ verdict: 'stable', min: 48, max: 55 })
+  })
+  it('回ごとの点数のばらつきや元の点数とのずれが大きければ noisy', () => {
+    expect(summarizeVerification(50, '1索', v([60, 90, 75], ['1索', '1索', '1索'])).verdict).toBe('noisy')
+    expect(summarizeVerification(40, '1索', v([80, 82, 85], ['1索', '1索', '1索'])).verdict).toBe('noisy')
+  })
+  it('最善手が変われば bestChanged', () => {
+    expect(summarizeVerification(50, '1索', v([50, 50, 50], ['1索', '2筒', '1索'])).verdict).toBe('bestChanged')
   })
 })
