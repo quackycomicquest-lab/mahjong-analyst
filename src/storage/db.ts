@@ -20,7 +20,7 @@ export interface StoredSettings {
   length: 'tonpuu' | 'hanchan'
   strength: 1 | 2 | 3
   evalMode: 'auto' | 'full' | 'light'
-  aiSpeed: 'normal' | 'fast'
+  aiSpeed: 'fast' | 'normal' | 'slow'
   /** 和了の局の終わりに点数計算テストを出す（古い保存データには無いので省略可） */
   scoreQuiz?: boolean
 }

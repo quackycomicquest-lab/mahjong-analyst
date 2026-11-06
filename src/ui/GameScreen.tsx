@@ -1,6 +1,9 @@
 /**
  * 対局画面（仕様 §2-2, §8-2）
- * Mac：横長の卓＋右側に評価パネル ／ iPhone：縦長の卓＋下部に折りたためる評価パネル
+ * Mac：横長の卓＋右側に評価パネル
+ * iPhone：横画面で、卓を中央・手牌を下いっぱい・操作ボタンを手牌の右上・AI評価を右上に置く（雀魂のスマートフォン版と同じ配置）。
+ *         縦向きのときは横向きにするよう案内する（縦のまま使うこともできる）
+ * 縦長の画面・幅の狭いウィンドウ：縦長の卓＋下部に折りたためる評価パネル
  */
 import { useState } from 'react'
 import { Board } from './Board'
@@ -9,14 +12,25 @@ import { Tile } from './Tile'
 import { EvaluationPanel } from './EvaluationPanel'
 import { GameResultModal, RoundResultModal } from './ResultModal'
 import { roundLabel } from './labels'
-import type { useGame } from './useGame'
+import { AI_SPEED_LABELS, type GameSettings, type useGame } from './useGame'
 
 type GameHandle = ReturnType<typeof useGame>
 
-export function GameScreen({ handle, onQuit }: { handle: GameHandle; onQuit: () => void }) {
+export function GameScreen({
+  handle,
+  aiSpeed,
+  onSpeedChange,
+  onQuit,
+}: {
+  handle: GameHandle
+  aiSpeed: GameSettings['aiSpeed']
+  onSpeedChange: (s: GameSettings['aiSpeed']) => void
+  onQuit: () => void
+}) {
   const { game, view, players, evals, act, start, saveError, quizEnabled, recordQuiz, quizLog } = handle
   // iPhone の下部パネル：開いた場面（uiKey）の間だけ開く。自分が判断する場面になったら自動で閉じて手牌を見せる
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
+  const [portraitOk, setPortraitOk] = useState(false)
   if (!game || !view) return null
   const ph = game.phase
   const activeSeat = ph.type === 'turn' ? ph.seat : ph.type === 'response' ? ph.actor : null
@@ -43,6 +57,17 @@ export function GameScreen({ handle, onQuit }: { handle: GameHandle; onQuit: () 
             ))}
           </span>
         </span>
+        <button
+          type="button"
+          className="btn btn--ghost topbar__speed"
+          title="AIの打牌の速さを切り替える（速い→普通→遅め）"
+          onClick={() => {
+            const i = AI_SPEED_LABELS.findIndex(([v]) => v === aiSpeed)
+            onSpeedChange(AI_SPEED_LABELS[(i + 1) % AI_SPEED_LABELS.length][0])
+          }}
+        >
+          速さ：{AI_SPEED_LABELS.find(([v]) => v === aiSpeed)?.[1] ?? '普通'}
+        </button>
         <button
           type="button"
           className="btn btn--ghost"
@@ -72,6 +97,18 @@ export function GameScreen({ handle, onQuit }: { handle: GameHandle; onQuit: () 
           onToggle={() => setExpandedKey(expandedKey === uiKey ? null : uiKey)}
         />
       </aside>
+
+      <div className={`rotate-hint ${portraitOk ? 'is-dismissed' : ''}`} role="dialog" aria-label="横向きの案内">
+        <div className="rotate-hint__icon" aria-hidden />
+        <p>
+          iPhoneを横向きにしてください。
+          <br />
+          <span className="muted small">横画面で、卓と手牌を大きく表示します。</span>
+        </p>
+        <button type="button" className="btn btn--plain" onClick={() => setPortraitOk(true)}>
+          縦のまま使う
+        </button>
+      </div>
 
       {ph.type === 'roundEnd' && (
         <RoundResultModal

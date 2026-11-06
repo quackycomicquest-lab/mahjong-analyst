@@ -7,7 +7,7 @@ import { makeView } from '../testing/makeView'
 import { abilities, categoryStats, filterByRecentGames, weakestCategory, type ScoredDecision } from './abilities'
 import { classifyDecision, isAllLast } from './classify'
 import { enroll, isDue, isMastered, pickPractice, pickSession, schedule } from './review'
-import { basePayment, makeScoreQuiz, paymentLabel } from './scoreQuiz'
+import { actualCellId, allCells, answerLabel, basePayment, paymentLabel, scoreTable, scoreTableFor } from './scoreQuiz'
 import type { HandValue } from '../rules/score'
 
 const discard = (view: PlayerView, n: string, riichi = false): Action =>
@@ -140,7 +140,27 @@ describe('点数計算テスト', () => {
     expect(basePayment(0, 0, false, false, 2)).toEqual({ main: 64000, additional: 0 })
   })
 
-  it('4択に正解が1つだけ入り、誤答は重複しない', () => {
+  it('点数表：子のロン・子のツモ・親のツモのマス', () => {
+    const cell = (t: ReturnType<typeof scoreTable>, id: string) => allCells(t).find((c) => c.id === id)!
+    const ron = scoreTable(false, false)
+    expect(cell(ron, '30-4').label).toBe('7700')
+    expect(cell(ron, '60-3').label).toBe('7700')
+    expect(cell(ron, '40-4')).toMatchObject({ label: '8000', limit: '満貫' })
+    expect(cell(ron, '30-4').limit).toBeNull()
+    expect(cell(ron, 'limit-6').label).toBe('12000')
+    expect(cell(ron, 'yakuman-2').label).toBe('64000')
+    // ロンの20符、1翻の25符はありえない
+    expect(cell(ron, '20-2').valid).toBe(false)
+    expect(cell(ron, '25-1').valid).toBe(false)
+    expect(cell(ron, '25-2')).toMatchObject({ valid: true, label: '1600' })
+    const tsumo = scoreTable(false, true)
+    expect(cell(tsumo, '20-2')).toMatchObject({ valid: true, label: '400-700' })
+    expect(cell(tsumo, '20-1').valid).toBe(false)
+    expect(cell(tsumo, '25-2').valid).toBe(false)
+    expect(cell(scoreTable(true, true), '30-3').label).toBe('2000オール')
+  })
+
+  it('実際の和了のマスが正解の点数になる', () => {
     const value = {
       han: 3,
       fu: 30,
@@ -148,10 +168,10 @@ describe('点数計算テスト', () => {
       yakumanMultiplier: 0,
       payment: { main: 3900, additional: 0 },
     } as unknown as HandValue
-    const q = makeScoreQuiz(value, false, 7)
-    expect(q.choices).toHaveLength(4)
-    expect(new Set(q.choices).size).toBe(4)
-    expect(q.choices.filter((c) => c === q.answer)).toHaveLength(1)
-    expect(q.answer).toBe('3900')
+    const t = scoreTableFor(value, false)
+    expect(actualCellId(value)).toBe('30-3')
+    expect(allCells(t).find((c) => c.id === actualCellId(value))!.label).toBe(answerLabel(value, false))
+    // 110符を超える和了は行を足す
+    expect(scoreTable(false, false, 130).fuRows.at(-1)).toBe(130)
   })
 })

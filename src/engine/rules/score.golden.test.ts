@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import golden from './__fixtures__/score-golden.json'
-import { basePayment } from '../coach/scoreQuiz'
+import { actualCellId, allCells, basePayment, paymentLabel, scoreTableFor } from '../coach/scoreQuiz'
 import { calculateHandValue } from './score'
 import { countsOfTiles, countsToNotation, createTileSet, type PhysicalTile } from './tile'
 import type { MeldType, WinInput } from './types'
@@ -122,10 +122,16 @@ describe(`点数計算ゴールデン照合（${cases.length}件）`, () => {
       const costOk = Object.entries(e.cost!).every(
         ([k, v]) => r.payment[k as keyof typeof r.payment] === v,
       )
-      // 点数計算テストの選択肢づくりに使う計算（翻・符からの支払い）も一致すること
+      // 点数計算テストの点数表に使う計算（翻・符からの支払い）も一致すること
       const bp = basePayment(r.han, r.fu, r.isDealer, g.input.isTsumo, r.yakumanMultiplier)
       if (bp.main !== r.payment.main || bp.additional !== r.payment.additional) {
         mismatches.push(`${label}: 翻・符からの支払い ${JSON.stringify(bp)} / 実際 ${r.payment.main}/${r.payment.additional}`)
+      }
+      // 点数計算テストの点数表で、実際の和了のマスが正解の点数になっていること
+      const cell = allCells(scoreTableFor(r, g.input.isTsumo)).find((c) => c.id === actualCellId(r))
+      const ans = paymentLabel(r.payment.main, r.payment.additional, r.isDealer, g.input.isTsumo)
+      if (!cell || !cell.valid || cell.label !== ans) {
+        mismatches.push(`${label}: 点数表のマス ${actualCellId(r)} ${cell?.label}${cell?.valid ? '' : '（選べない）'} / 正解 ${ans}`)
       }
       // 役満は符が点数に影響しないので比較しない
       const fuOk = r.yakumanMultiplier > 0 || r.fu === e.fu

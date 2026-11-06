@@ -216,6 +216,17 @@ button {
   color: var(--muted);
   line-height: 1.6;
 }
+.title__columns {
+  display: grid;
+  gap: 16px;
+}
+.title__settings,
+.title__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
 .field {
   border: none;
   margin: 0;
@@ -310,6 +321,9 @@ button {
 }
 .topbar > .btn {
   margin-left: auto;
+}
+.topbar > .btn + .btn {
+  margin-left: 0;
 }
 .table-area {
   display: flex;
@@ -1007,9 +1021,9 @@ button {
   color: var(--muted);
 }
 
-/* ------------------------------------------------------------------ iPhone（縦長） */
+/* ------------------------------------------------------------------ 縦長の画面・幅の狭いウィンドウ（iPhone の横画面は下の「iPhone（横画面）」） */
 
-@media (max-width: 899px), (orientation: portrait) {
+@media (max-width: 899px) and (min-height: 541px), (orientation: portrait) {
   :root {
     --hand-tw: min(calc((100vw - 20px) / 15.4), 44px);
     --meld-tw: min(calc((100vw - 20px) / 20), 28px);
@@ -1230,7 +1244,7 @@ button {
   font-size: 0.75rem;
 }
 
-@media (max-width: 899px), (orientation: portrait) {
+@media (max-width: 899px) and (min-height: 541px), (orientation: portrait) {
   .history-item {
     grid-template-columns: 1fr auto;
     row-gap: 2px;
@@ -1464,7 +1478,7 @@ button {
   gap: 2px;
 }
 
-@media (max-width: 899px), (orientation: portrait) {
+@media (max-width: 899px) and (min-height: 541px), (orientation: portrait) {
   .ability {
     grid-template-columns: 6.5em 1fr 5.5em;
     font-size: 0.85rem;
@@ -1778,35 +1792,130 @@ button {
   font-size: 0.8rem;
   margin-left: 6px;
 }
-.quiz__choices {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+/* 点数表（点数計算テスト） */
+.result-card--quiz {
+  width: min(1040px, 100%);
 }
-.quiz__choice {
-  min-height: 56px;
-  border-radius: 14px;
-  border: 2px solid rgb(255 255 255 / 0.18);
-  background: linear-gradient(180deg, #24375c, #172540);
-  font-size: 1.35rem;
-  font-weight: 900;
+.quiz {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+}
+.quiz__main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.score-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* 答えた後に説明が伸びても、点数表は見えたままにする */
+  position: sticky;
+  top: 0;
+}
+.score-table__caption {
+  font-weight: 800;
+  color: var(--accent);
+}
+.score-table__caption .muted {
+  font-weight: 400;
+  font-size: 0.75rem;
+  margin-left: 4px;
+}
+.score-table__body {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.score-grid {
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.score-grid th {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.score-grid thead th {
+  padding-bottom: 2px;
+}
+.score-grid tbody th {
+  text-align: right;
+}
+.score-grid td {
+  padding: 0;
+}
+.score-cell {
+  width: 100%;
+  min-width: 64px;
+  min-height: 26px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: linear-gradient(180deg, #22345a, #18263f);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.15);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
-.quiz__choice:hover:not(:disabled) {
+.score-cell:hover:not(:disabled) {
   border-color: var(--glow);
+  box-shadow: 0 0 0 1px var(--glow);
 }
-.quiz__choice.is-correct {
+.score-cell:disabled {
+  cursor: default;
+}
+.score-cell:disabled:not(.is-correct, .is-wrong, .is-actual) {
+  opacity: 0.55;
+}
+.score-cell.is-limit {
+  background: linear-gradient(180deg, #4a3a1c, #2f2412);
+  border-color: rgb(242 193 78 / 0.35);
+}
+.score-cell__mangan {
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+.score-limits {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 21px;
+}
+.score-limits .score-cell {
+  min-width: 132px;
+  justify-content: space-between;
+  min-height: 30px;
+}
+.score-cell__name {
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+.score-cell.is-correct {
   border-color: var(--great);
   background: linear-gradient(180deg, #2c7a5a, #1b5040);
+  opacity: 1;
 }
-.quiz__choice.is-wrong {
+.score-cell.is-wrong {
   border-color: var(--poor);
   background: linear-gradient(180deg, #7a2f2f, #4d1d1d);
+  opacity: 1;
 }
-.quiz__choice.is-dim {
-  opacity: 0.45;
+.score-cell.is-actual {
+  box-shadow: 0 0 0 2px #fff;
+  opacity: 1;
 }
 .quiz__verdict {
   font-size: 1.3rem;
@@ -1865,7 +1974,7 @@ button {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2);
 }
 
-@media (max-width: 899px), (orientation: portrait) {
+@media (max-width: 899px) and (min-height: 541px), (orientation: portrait) {
   .action-bar {
     justify-content: center;
   }
@@ -1883,7 +1992,437 @@ button {
   .win__points {
     font-size: 1.8rem;
   }
-  .quiz__choice {
-    font-size: 1.15rem;
+}
+
+/* ------------------------------------------------------------------ iPhone（横画面）
+   雀魂のスマートフォン版と同じ配置：卓を画面の中央に大きく置き、自分の手牌を画面の下いっぱいに、
+   操作ボタンを手牌の右上に、局の情報を左上に、メニューとAI評価を右上に置く。 */
+
+@media (orientation: landscape) and (max-height: 540px) {
+  :root {
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --hand-tw: min(calc((100vw - var(--safe-l) - var(--safe-r) - 40px) / 15.6), 12.5dvh);
+    --meld-tw: calc(var(--hand-tw) * 0.7);
+    /* 手牌の段の高さ（牌の高さ＋選んだ牌が浮く分） */
+    --hand-h: calc(var(--hand-tw) * 1.68 + 4px);
+    /* 卓の一辺：卓の下の 15% に手牌が重なる */
+    --board-s: min(calc((100dvh - var(--hand-h) - 4px) / 0.85), calc(100dvh - 8px));
+    /* 卓の左右の余白 */
+    --gutter: calc((100vw - var(--board-s)) / 2);
+  }
+  .game {
+    display: block;
+    position: relative;
+    height: 100dvh;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at 50% 45%, #173a5c 0%, transparent 65%),
+      var(--bg);
+  }
+
+  /* 左上：局・供託・残り枚数・ドラ ／ 右上：速さ・終了 */
+  .topbar {
+    position: absolute;
+    inset: 0 0 auto 0;
+    z-index: 16;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: start;
+    gap: 4px 6px;
+    padding: 6px calc(var(--safe-r) + 8px) 0 calc(var(--safe-l) + 8px);
+    background: transparent;
+    border: none;
+    pointer-events: none;
+  }
+  .topbar > * {
+    pointer-events: auto;
+  }
+  .topbar__brand {
+    display: none;
+  }
+  .topbar__round {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    padding: 2px 10px;
+    border-radius: 8px;
+    background: rgb(8 16 30 / 0.78);
+    border: 1px solid rgb(242 193 78 / 0.4);
+    font-size: 0.85rem;
+  }
+  .topbar__info {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+    flex-wrap: wrap;
+    max-width: calc(var(--gutter) - var(--safe-l) - 14px);
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: rgb(8 16 30 / 0.7);
+    font-size: 0.72rem;
+  }
+  .topbar .tile--mini {
+    --tw: 18px;
+  }
+  .topbar > .btn {
+    grid-row: 1;
+    min-height: 30px;
+    padding: 2px 12px;
+    font-size: 0.78rem;
+    margin-left: 0;
+    background: rgb(8 16 30 / 0.78);
+  }
+  .topbar__speed {
+    grid-column: 3;
+  }
+  .topbar > .btn:last-child {
+    grid-column: 4;
+  }
+  .save-error {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 17;
+    border-radius: 8px;
+    max-width: 50vw;
+  }
+
+  /* 卓：画面の上から、左右の中央に */
+  .table-area {
+    position: absolute;
+    inset: 0;
+    display: block;
+    padding: 0;
+    overflow: visible;
+  }
+  .board {
+    --S: var(--board-s);
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* 卓の下端は手牌に隠れるので、下側の2人の表示を上げる */
+  .player-plate--0,
+  .player-plate--1 {
+    bottom: 16cqw;
+  }
+
+  /* 手牌：画面の下いっぱいに（卓の下端に重ねる） */
+  .controls {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 12;
+    display: block;
+    padding: 0 calc(var(--safe-r) + 8px) 0 calc(var(--safe-l) + 8px);
+    pointer-events: none;
+  }
+  .hand-row {
+    flex-direction: row;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 10px;
+    margin: 0 auto;
+    pointer-events: auto;
+  }
+  .hand {
+    padding: calc(var(--hand-tw) * 0.3) 4px 2px;
+    background: none;
+    border-radius: 0;
+  }
+  .hand.is-active {
+    box-shadow: none;
+  }
+  .my-melds {
+    padding-bottom: 2px;
+  }
+  .my-melds .melds {
+    gap: 4px;
+  }
+
+  /* 操作ボタン：手牌の右上に大きく ／ 案内文：手牌の左上に */
+  .action-bar {
+    position: absolute;
+    left: calc(var(--safe-l) + 10px);
+    right: calc(var(--safe-r) + 12px);
+    bottom: calc(var(--hand-h) + 4px);
+    width: auto;
+    min-height: 0;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: nowrap;
+    pointer-events: none;
+  }
+  .action-bar__status {
+    max-width: calc(var(--gutter) - var(--safe-l) - 16px);
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: rgb(8 16 30 / 0.7);
+    font-size: 0.7rem;
+    line-height: 1.35;
+  }
+  .action-bar__status:empty {
+    display: none;
+  }
+  .action-bar__buttons {
+    justify-content: flex-end;
+    flex-wrap: wrap-reverse;
+    gap: 6px;
+    max-width: 60vw;
+    pointer-events: auto;
+  }
+  .action-bar .btn {
+    min-width: 78px;
+    min-height: 42px;
+    padding: 4px 14px;
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+  }
+
+  /* AI評価：右上の小さなカード。開くと右側に大きく出す */
+  .side {
+    position: absolute;
+    top: 42px;
+    right: calc(var(--safe-r) + 8px);
+    width: max(170px, min(300px, calc(var(--gutter) - var(--safe-r) - 14px)));
+    max-height: calc(100dvh - 42px - var(--hand-h) - 64px);
+    z-index: 14;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgb(17 29 49 / 0.94);
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.45);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .side:has(.eval:not(.is-collapsed)) {
+    top: 6px;
+    width: min(460px, calc(100vw - var(--safe-r) - var(--safe-l) - 16px), 62vw);
+    /* 開いていても手牌は隠さない（読みながら打てるように） */
+    max-height: calc(100dvh - var(--hand-h) - 10px);
+    z-index: 30;
+  }
+  .eval__handle {
+    cursor: pointer;
+    min-height: 40px;
+    padding: 6px 10px;
+    gap: 6px;
+    position: sticky;
+    top: 0;
+    background: rgb(17 29 49 / 0.98);
+    z-index: 1;
+  }
+  .eval__title {
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .eval__summary {
+    font-size: 0.8rem;
+  }
+  .eval__chevron {
+    display: inline;
+    color: var(--muted);
+  }
+  .eval.is-collapsed .eval__body {
+    display: none;
+  }
+  .eval.is-collapsed .eval__handle {
+    border-bottom: none;
+  }
+  .eval__body {
+    padding: 10px 12px 16px;
+  }
+
+  /* 結果・点数計算テスト：高さが足りないので詰める */
+  .modal {
+    padding: 6px calc(var(--safe-r) + 8px) 6px calc(var(--safe-l) + 8px);
+  }
+  .result-card {
+    max-height: calc(100dvh - 12px);
+    padding: 12px 16px;
+  }
+  .result-card--quiz {
+    width: 100%;
+  }
+  .quiz {
+    gap: 12px;
+  }
+  .quiz__main {
+    gap: 6px;
+  }
+  .quiz__question {
+    font-size: 0.95rem;
+  }
+  .score-cell {
+    min-width: 58px;
+    min-height: 23px;
+    font-size: 0.74rem;
+    padding: 1px 4px;
+  }
+  .score-limits .score-cell {
+    min-width: 116px;
+    min-height: 26px;
+  }
+  .score-limits {
+    padding-top: 19px;
+  }
+}
+
+/* 縦長の画面では、点数表を説明の下に置き、満貫以上の欄を表の下に並べる */
+@media (max-width: 899px) and (min-height: 541px), (orientation: portrait) {
+  .quiz {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .score-table {
+    position: static;
+  }
+  .score-table__body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .score-grid {
+    width: 100%;
+    border-spacing: 1px;
+  }
+  .score-grid th {
+    padding: 0 2px;
+    font-size: 0.66rem;
+  }
+  .score-cell {
+    min-width: 0;
+    padding-inline: 1px;
+    font-size: 0.68rem;
+    letter-spacing: -0.02em;
+  }
+  .score-limits {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding-top: 0;
+  }
+  .score-limits .score-cell {
+    min-width: 0;
+  }
+}
+
+/* iPhone（横画面）のタイトル：左に設定、右に対戦相手とボタン */
+@media (orientation: landscape) and (max-height: 540px) {
+  .title {
+    padding: 10px calc(env(safe-area-inset-right, 0px) + 12px) 10px calc(env(safe-area-inset-left, 0px) + 12px);
+  }
+  .title__card {
+    width: min(860px, 100%);
+    gap: 8px;
+    padding: 14px 18px;
+  }
+  .title__lead {
+    margin: 0;
+    font-size: 0.85rem;
+  }
+  .title__columns {
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .title__settings,
+  .title__actions {
+    gap: 8px;
+  }
+  .title__brand {
+    font-size: 1.3rem;
+  }
+  .title__tagline {
+    margin: 0;
+  }
+  .field legend {
+    margin-bottom: 2px;
+    font-size: 0.75rem;
+  }
+  .segmented__item {
+    min-height: 32px;
+    padding-block: 2px;
+  }
+  .btn--large {
+    min-height: 42px;
+    font-size: 1rem;
+  }
+}
+
+/* iPhone（横画面）の復習問題：4人の河を2列に並べ、手牌まで1画面に収める */
+@media (orientation: landscape) and (max-height: 540px) {
+  .page {
+    padding-left: calc(env(safe-area-inset-left, 0px) + 12px);
+    padding-right: calc(env(safe-area-inset-right, 0px) + 12px);
+  }
+  .problem {
+    gap: 6px;
+  }
+  .problem .page__header h1 {
+    font-size: 1rem;
+  }
+  .problem__board {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+  .problem__players {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+  .problem__player {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    padding: 3px 6px;
+  }
+  .problem__name {
+    font-size: 0.75rem;
+  }
+}
+
+/* 縦向きの iPhone：対局は横画面で行う */
+.rotate-hint {
+  display: none;
+}
+@media (orientation: portrait) and (max-width: 600px) {
+  .rotate-hint {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 24px;
+    text-align: center;
+    background:
+      radial-gradient(ellipse at 50% 40%, #173a5c 0%, transparent 70%),
+      var(--bg);
+  }
+  .rotate-hint.is-dismissed {
+    display: none;
+  }
+  .rotate-hint__icon {
+    width: 56px;
+    height: 92px;
+    border: 3px solid var(--accent);
+    border-radius: 12px;
+    animation: rotate-hint 2.4s ease-in-out infinite;
+  }
+  .rotate-hint p {
+    margin: 0;
+    font-weight: 800;
+    line-height: 1.6;
+  }
+}
+@keyframes rotate-hint {
+  0%,
+  25% {
+    transform: rotate(0deg);
+  }
+  55%,
+  100% {
+    transform: rotate(-90deg);
   }
 }

@@ -1,11 +1,19 @@
 /**
  * 局の結果・対局の結果
  *
- * 和了の局は、点数を見せる前に点数計算テスト（4択）を出す（設定でオフにできる）。
+ * 和了の局は、点数を見せる前に点数計算テスト（点数表のマスを選ぶ）を出す（設定でオフにできる）。
  * 答えた後に役・翻・符・符の内訳を見せ、最後に点数の移動を表示する。
  */
 import { useMemo, useState } from 'react'
-import { makeScoreQuiz, SITUATIONAL_YAKU } from '../engine/coach/scoreQuiz'
+import {
+  actualCellId,
+  allCells,
+  answerLabel,
+  scoreTableFor,
+  SITUATIONAL_YAKU,
+  type ScoreCell,
+  type ScoreTable,
+} from '../engine/coach/scoreQuiz'
 import type { GameResult, RoundInfo, RoundResult, WinRecord } from '../engine/game/types'
 import type { TileKind } from '../engine/rules/tile'
 import type { QuizRecord } from '../storage/db'
@@ -36,7 +44,7 @@ export function RoundResultModal(props: RoundResultProps) {
     const w = wins[quizDone]
     return (
       <div className="modal modal--result" role="dialog" aria-modal="true" aria-label="点数計算テスト">
-        <div className="result-card">
+        <div className="result-card result-card--quiz">
           <ScoreQuizCard
             key={quizDone}
             win={w}
@@ -193,85 +201,186 @@ function ScoreQuizCard({
   onNext: () => void
 }) {
   const tsumo = win.from === null
-  const quiz = useMemo(() => makeScoreQuiz(win.value, tsumo, roundIndex * 31 + win.seat + 1), [win, tsumo, roundIndex])
-  const [chosen, setChosen] = useState<string | null>(null)
   const v = win.value
+  const table = useMemo(() => scoreTableFor(v, tsumo), [v, tsumo])
+  const answer = answerLabel(v, tsumo)
+  const actualId = actualCellId(v)
+  const [chosen, setChosen] = useState<ScoreCell | null>(null)
   const situational = v.yaku.filter((y) => SITUATIONAL_YAKU.has(y.id)).map((y) => y.name)
   const dealer = win.seat === round.dealer
+  const correct = chosen !== null && chosen.label === answer
 
-  const answer = (c: string) => {
-    if (chosen) return
+  const pick = (c: ScoreCell) => {
+    if (chosen || !c.valid) return
     setChosen(c)
     onAnswered({
       roundIndex,
       seat: win.seat,
-      correct: c === quiz.answer,
-      answer: c,
-      expected: quiz.answer,
+      correct: c.label === answer,
+      answer: c.label,
+      expected: answer,
       han: v.han,
       fu: v.fu,
       yakuman: v.yakumanMultiplier > 0,
     })
   }
 
+  const actualName =
+    v.yakumanMultiplier > 0
+      ? (allCells(table).find((c) => c.id === actualId)?.limit ?? '役満')
+      : `${v.han}翻${v.fu}符${LIMIT_NAMES[v.level] ? `（${LIMIT_NAMES[v.level]}）` : ''}`
+
   return (
     <div className="quiz">
-      <div className="quiz__title">
-        点数計算テスト{total > 1 ? `（${index + 1}/${total}）` : ''}
-      </div>
-      <WinHeader win={win} players={players} />
-      <WinHand win={win} />
-      <div className="quiz__facts">
-        <span className="fact">{dealer ? '親' : '子'}</span>
-        <span className="fact">場風 {WIND_NAMES[round.wind]}</span>
-        <span className="fact">自風 {seatWind(win.seat, round.dealer)}</span>
-        {situational.map((s) => (
-          <span key={s} className="fact fact--accent">
-            {s}
-          </span>
-        ))}
-      </div>
-      <IndicatorRow doraIndicators={doraIndicators} uraIndicators={uraIndicators} />
-      <p className="quiz__question">
-        この和了は何点？<span className="muted">（本場・供託は含めない。ツモは「子の支払い-親の支払い」）</span>
-      </p>
-      <div className="quiz__choices">
-        {quiz.choices.map((c) => {
-          const state = !chosen ? '' : c === quiz.answer ? 'is-correct' : c === chosen ? 'is-wrong' : 'is-dim'
-          return (
-            <button key={c} type="button" className={`quiz__choice ${state}`} disabled={!!chosen} onClick={() => answer(c)}>
-              {c}
-            </button>
-          )
-        })}
-      </div>
-      {chosen && (
-        <div className="quiz__reveal">
-          <div className={`quiz__verdict ${chosen === quiz.answer ? 'is-correct' : 'is-wrong'}`}>
-            {chosen === quiz.answer ? '◯ 正解' : `✕ 不正解（正解は ${quiz.answer}）`}
-          </div>
-          <WinBreakdown win={win} />
-          {v.fuDetails.length > 0 && v.yakumanMultiplier === 0 && v.fu !== 25 && (
-            <details className="fu-details">
-              <summary>符の内訳</summary>
-              <ul>
-                {v.fuDetails.map((f, i) => (
-                  <li key={i}>
-                    <span>{f.reason}</span>
-                    <span>{f.fu}符</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="muted small">合計を10符単位に切り上げて {v.fu}符</p>
-            </details>
-          )}
-          <div className="modal__buttons">
-            <button type="button" className="btn btn--riichi btn--wide" autoFocus onClick={onNext}>
-              {index + 1 < total ? '次の和了へ' : '結果へ'}
-            </button>
-          </div>
+      <div className="quiz__main">
+        <div className="quiz__title">
+          点数計算テスト{total > 1 ? `（${index + 1}/${total}）` : ''}
         </div>
-      )}
+        <WinHeader win={win} players={players} />
+        <WinHand win={win} />
+        <div className="quiz__facts">
+          <span className="fact">{dealer ? '親' : '子'}</span>
+          <span className="fact">場風 {WIND_NAMES[round.wind]}</span>
+          <span className="fact">自風 {seatWind(win.seat, round.dealer)}</span>
+          {situational.map((s) => (
+            <span key={s} className="fact fact--accent">
+              {s}
+            </span>
+          ))}
+        </div>
+        <IndicatorRow doraIndicators={doraIndicators} uraIndicators={uraIndicators} />
+        {!chosen ? (
+          <p className="quiz__question">
+            この和了は何点？ 点数表のマスを選んでください。
+            <span className="muted">（本場・供託は含めない）</span>
+          </p>
+        ) : (
+          <div className="quiz__reveal">
+            <div className={`quiz__verdict ${correct ? 'is-correct' : 'is-wrong'}`}>
+              {correct
+                ? chosen.id === actualId || (chosen.limit && chosen.limit === LIMIT_NAMES[v.level])
+                  ? `◯ 正解（${answer}）`
+                  : `◯ 正解（同じ点数のマス。この和了は ${actualName}）`
+                : `✕ 不正解（正解は ${answer}：${actualName}）`}
+            </div>
+            <WinBreakdown win={win} />
+            {v.fuDetails.length > 0 && v.yakumanMultiplier === 0 && v.fu !== 25 && (
+              <details className="fu-details">
+                <summary>符の内訳</summary>
+                <ul>
+                  {v.fuDetails.map((f, i) => (
+                    <li key={i}>
+                      <span>{f.reason}</span>
+                      <span>{f.fu}符</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="muted small">合計を10符単位に切り上げて {v.fu}符</p>
+              </details>
+            )}
+            <div className="modal__buttons">
+              <button type="button" className="btn btn--riichi btn--wide" autoFocus onClick={onNext}>
+                {index + 1 < total ? '次の和了へ' : '結果へ'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      <ScoreTablePicker
+        table={table}
+        dealer={dealer}
+        tsumo={tsumo}
+        chosenId={chosen?.id ?? null}
+        answer={chosen ? answer : null}
+        actualId={chosen ? actualId : null}
+        onPick={pick}
+      />
+    </div>
+  )
+}
+
+/** 点数表（符×翻のマスと、満貫以上の欄）。答えた後は正解のマスを示す */
+function ScoreTablePicker({
+  table,
+  dealer,
+  tsumo,
+  chosenId,
+  answer,
+  actualId,
+  onPick,
+}: {
+  table: ScoreTable
+  dealer: boolean
+  tsumo: boolean
+  chosenId: string | null
+  /** 答えた後だけ渡す */
+  answer: string | null
+  actualId: string | null
+  onPick: (c: ScoreCell) => void
+}) {
+  const answered = answer !== null
+  const cellButton = (c: ScoreCell, withName: boolean) => {
+    const state = !answered
+      ? ''
+      : [
+          c.label === answer ? 'is-correct' : '',
+          c.id === chosenId && c.label !== answer ? 'is-wrong' : '',
+          c.id === chosenId ? 'is-chosen' : '',
+          c.id === actualId ? 'is-actual' : '',
+        ].join(' ')
+    // 親のツモは「○オール」を表の見出しに書き、マスは数字だけにする
+    const text = c.label.replace('オール', '')
+    const name = c.yakuman ? c.limit : `${c.han}翻${c.fu}符`
+    return (
+      <button
+        type="button"
+        className={`score-cell ${c.limit ? 'is-limit' : ''} ${state}`}
+        disabled={answered || !c.valid}
+        aria-label={c.valid ? `${withName ? c.limit : name} ${c.label}` : `${name}（なし）`}
+        onClick={() => onPick(c)}
+      >
+        {withName && <span className="score-cell__name">{c.limit}</span>}
+        {c.valid ? (
+          !withName && c.limit ? <span className="score-cell__mangan">満貫</span> : <span className="score-cell__pts">{text}</span>
+        ) : (
+          '—'
+        )}
+      </button>
+    )
+  }
+  return (
+    <div className="score-table" role="group" aria-label="点数表">
+      <div className="score-table__caption">
+        {dealer ? '親' : '子'}の{tsumo ? 'ツモ' : 'ロン'}
+        <span className="muted">
+          {tsumo ? (dealer ? '（1人あたり・○オール）' : '（子の支払い-親の支払い）') : '（放銃者の支払い）'}
+        </span>
+      </div>
+      <div className="score-table__body">
+        <table className="score-grid">
+          <thead>
+            <tr>
+              <th scope="col">符＼翻</th>
+              {table.hanCols.map((h) => (
+                <th key={h} scope="col">
+                  {h}翻
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.grid.map((row, i) => (
+              <tr key={table.fuRows[i]}>
+                <th scope="row">{table.fuRows[i]}符</th>
+                {row.map((c) => (
+                  <td key={c.id}>{cellButton(c, false)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="score-limits">{table.limits.map((c) => <div key={c.id}>{cellButton(c, true)}</div>)}</div>
+      </div>
     </div>
   )
 }

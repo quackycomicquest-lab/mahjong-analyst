@@ -47,10 +47,18 @@ export interface EvalEntry {
   error: string | null
 }
 
-const AI_DELAYS = {
-  normal: { turn: 550, response: 250 },
+/** AI の打牌・応答までの間（ミリ秒）。設定「AIの打牌の速さ」で選ぶ */
+export const AI_DELAYS = {
   fast: { turn: 120, response: 60 },
+  normal: { turn: 550, response: 250 },
+  slow: { turn: 1200, response: 550 },
 } as const
+
+export const AI_SPEED_LABELS: [GameSettings['aiSpeed'], string][] = [
+  ['fast', '速い'],
+  ['normal', '普通'],
+  ['slow', '遅め'],
+]
 
 const SAVE_DEBOUNCE_MS = 400
 
@@ -148,7 +156,7 @@ export function useGame(prefs: GameSettings) {
         }
         bump()
       },
-      ph.type === 'turn' ? AI_DELAYS[prefs.aiSpeed].turn : AI_DELAYS[prefs.aiSpeed].response,
+      ph.type === 'turn' ? (AI_DELAYS[prefs.aiSpeed] ?? AI_DELAYS.normal).turn : (AI_DELAYS[prefs.aiSpeed] ?? AI_DELAYS.normal).response,
     )
     return () => clearTimeout(timer)
   }, [game, version, bump, prefs.aiSpeed])
