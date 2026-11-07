@@ -14,7 +14,7 @@ local-data/ の外（リポジトリ・ドキュメント）に局面の生デ�
 npx tsx bench/flags-inbox.ts
 ```
 
-- iCloud Drive の MahjongAnalyst フォルダ（無ければ ~/Downloads）の最新の `mahjong-flags-*.json` を読み、
+- iCloud Drive の MahjongAnalyst フォルダ・iCloud Drive の一番上・~/Downloads にある最新の `mahjong-flags-*.json` を読み、
   分析済み（local-data/flags-ledger.json）でない判断と、理由・メモを書き換えた判断だけを local-data/flags-inbox/pending.json にまとめる。
 - ファイルが無い・新しい判断が 0 件なら、利用者にそう伝えて終わる（アプリの「Mac へ送る」→「"ファイル"に保存」→ iCloud Drive の MahjongAnalyst）。
 

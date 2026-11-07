@@ -115,6 +115,26 @@ const RIICHI_BONUS_RATE = riichiBonusRate()
 const ONE_SHANTEN_PUSH_LIMIT = 0.05
 const ONE_SHANTEN_PUSH_LIMIT_MULTI = 0.01
 
+const isYaochu = (k: TileKind) => k >= 27 || k % 9 === 0 || k % 9 === 8
+
+/**
+ * 余った字牌の対子：対子が3組以上あり、断幺九を狙える（副露が中張牌だけ・么九牌が3枚以下）とき、
+ * 役牌でない字牌の対子は雀頭の候補として余っているので、先に崩す（役立ち度から引く）
+ */
+const SURPLUS_HONOR_PAIR_BIAS = 3
+function surplusHonorPair(c: number[], meldKinds: TileKind[][], yakuhai: Set<TileKind>): TileKind[] {
+  if (meldKinds.some((m) => m.some(isYaochu))) return []
+  let pairs = 0
+  let y = 0
+  const honors: TileKind[] = []
+  for (let k = 0; k < KIND_COUNT; k++) {
+    if (c[k] >= 2) pairs++
+    if (c[k] > 0 && isYaochu(k)) y += c[k]
+    if (k >= 27 && c[k] === 2 && !yakuhai.has(k)) honors.push(k)
+  }
+  return pairs >= 3 && y <= 3 ? honors : []
+}
+
 function fastShanten(c: number[], meldCount: number): number {
   let s = regularShantenUnadjusted(c, meldCount)
   if (meldCount === 0) s = Math.min(s, chiitoitsuShanten(c), kokushiShanten(c))
@@ -262,7 +282,7 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
           dBest >= 0 &&
           sBest < shanten &&
           (!best || sBest < best.s) &&
-          openYakuPossible(c, meldKinds, [opt.remove[0], opt.remove[1], x], opt.type, yakuhai)
+          openYakuPossible(c, meldKinds, [opt.remove[0], opt.remove[1], x], opt.type, yakuhai, dBest)
         c[opt.remove[0]]++
         c[opt.remove[1]]++
         if (ok) best = { opt, s: sBest, d: dBest }
@@ -396,17 +416,19 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
             } else shanten = s14
           } else if (s14 >= 0 && shanten > 0) {
             // 形の改善：ツモ牌の方が、手の中で最も孤立した牌より役に立つなら入れ替える（向聴数が戻らない場合のみ）
+            const surplus = surplusHonorPair(c, meldKinds, yakuhai)
+            const u0 = (k: TileKind) => usefulness(c, k) - (surplus.includes(k) ? SURPLUS_HONOR_PAIR_BIAS : 0)
             let worst = -1
             let worstU = Infinity
             for (let k = 0; k < KIND_COUNT; k++) {
               if (c[k] === 0 || k === draw) continue
-              const u = usefulness(c, k)
+              const u = u0(k)
               if (u < worstU) {
                 worstU = u
                 worst = k
               }
             }
-            if (worst >= 0 && usefulness(c, draw) > worstU + 0.5) {
+            if (worst >= 0 && u0(draw) > worstU + 0.5) {
               c[worst]--
               const s = fastShanten(c, meldCount)
               c[worst]++
@@ -657,6 +679,8 @@ function openYakuPossible(
   newMeld: TileKind[],
   type: 'pon' | 'chi',
   yakuhai: Set<TileKind>,
+  /** 鳴いた後に切る牌（断幺九・混一色の見込みは、この牌を切った後の手で見る） */
+  discard: TileKind = -1,
 ): boolean {
   const allMelds = [...meldKinds, newMeld]
   // 役牌：鳴く刻子・既にある副露・手の中の暗刻
@@ -670,9 +694,8 @@ function openYakuPossible(
     if (sets >= 5) return true
   }
   // 断幺九：副露に么九牌がなく、手の么九牌が1枚以下
-  const isYaochu = (k: TileKind) => k >= 27 || k % 9 === 0 || k % 9 === 8
   if (allMelds.every((m) => m.every((k) => !isYaochu(k)))) {
-    let yaochu = 0
+    let yaochu = discard >= 0 && isYaochu(discard) ? -1 : 0
     for (let k = 0; k < KIND_COUNT; k++) if (c[k] > 0 && isYaochu(k)) yaochu += c[k]
     if (yaochu <= 1) return true
   }
@@ -682,7 +705,7 @@ function openYakuPossible(
   for (const m of allMelds) if (m[0] < 27) suitCount[Math.floor(m[0] / 9)] += 3
   const main = suitCount.indexOf(Math.max(...suitCount))
   const meldsOk = allMelds.every((m) => m[0] >= 27 || Math.floor(m[0] / 9) === main)
-  let off = 0
+  let off = discard >= 0 && discard < 27 && Math.floor(discard / 9) !== main ? -1 : 0
   for (let k = 0; k < 27; k++) if (Math.floor(k / 9) !== main) off += c[k]
   return meldsOk && off <= 1
 }

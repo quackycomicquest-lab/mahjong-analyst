@@ -4,8 +4,8 @@
  *   npx tsx bench/flags-inbox.ts [--dir <フォルダ>] [--all]   … 新しく届いた判断を local-data/flags-inbox/pending.json にまとめる
  *   npx tsx bench/flags-inbox.ts --mark [<JSON>]              … その JSON の判断を「分析済み」として記録する（既定は pending.json）
  *
- * アプリの「Mac へ送る」で iCloud Drive の MahjongAnalyst フォルダに保存されたファイルのうち、最も新しいものを読む
- * （見つからなければ ~/Downloads）。分析済みの記録（local-data/flags-ledger.json）にない判断と、
+ * アプリの「Mac へ送る」で iCloud Drive（MahjongAnalyst フォルダ、または一番上）か ~/Downloads に保存されたファイルのうち、
+ * 最も新しいものを読む。分析済みの記録（local-data/flags-ledger.json）にない判断と、
  * 分析した後に理由・メモを書き換えた判断だけを取り出す。--all なら全件。
  * 個人の対局データなので local-data/ は git に入れない。
  */
@@ -32,10 +32,9 @@ const LOCAL = join(ROOT, 'local-data')
 const LEDGER = join(LOCAL, 'flags-ledger.json')
 const INBOX = join(LOCAL, 'flags-inbox')
 const PENDING = join(INBOX, 'pending.json')
-const DEFAULT_DIRS = [
-  join(homedir(), 'Library/Mobile Documents/com~apple~CloudDocs/MahjongAnalyst'),
-  join(homedir(), 'Downloads'),
-]
+const ICLOUD = join(homedir(), 'Library/Mobile Documents/com~apple~CloudDocs')
+/** 探す場所：iCloud Drive の MahjongAnalyst フォルダ、iCloud Drive の一番上（フォルダを選ばずに保存した場合）、ダウンロード */
+const DEFAULT_DIRS = [join(ICLOUD, 'MahjongAnalyst'), ICLOUD, join(homedir(), 'Downloads')]
 
 const args = process.argv.slice(2)
 const key = (f: FlagRecord) => `${f.gameId}:${f.decisionId}`

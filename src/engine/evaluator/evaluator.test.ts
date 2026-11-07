@@ -209,6 +209,15 @@ describe('鳴き・和了・九種九牌・立直判断の評価', () => {
     expect(e.score!).toBeGreaterThanOrEqual(80)
   })
 
+  it('対子が3組ある断幺九の手で、孤立した么九牌を先に切っても大きく減点しない（客風の対子は後で崩せる）', () => {
+    // 24萬 9萬 22筒 68筒 34索 688索 北北：9萬を先に切っても、北を先に切っても最後は同じ形になる
+    // 東家なので北は役牌でない
+    const view = makeView({ hand: '249m2268p34688s44z', wallRemaining: 49 })
+    view.round = { ...view.round, dealer: 0 }
+    const e = evaluateDecision(view, discard(view, '9m'), opts)
+    expect(e.score!).toBeGreaterThanOrEqual(75)
+  })
+
   it('役牌の対子をポンする判断を評価できる（鳴いた後の打牌まで含めて比較）', () => {
     const view = makeView({ hand: '55z234m57p13s689s9m', response: { from: 3, tile: '5z', actions: ponOf } })
     const pon = view.legalActions.find((a) => a.type === 'pon')!

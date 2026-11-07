@@ -150,7 +150,8 @@ export function FlagsSection({ games }: { games: GameRecord[] }) {
     setSent(null)
     if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
       try {
-        await navigator.share({ files: [file], title: '要検証の判断' })
+        // title を付けると、iOS の「"ファイル"に保存」で題名だけのテキストファイルも一緒に保存されるので付けない
+        await navigator.share({ files: [file] })
         setSent(`${name} を送りました`)
       } catch (e) {
         if ((e as Error).name !== 'AbortError') setSent(`送れませんでした（${(e as Error).message}）`)
