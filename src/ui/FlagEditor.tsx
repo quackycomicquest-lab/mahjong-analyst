@@ -1,5 +1,5 @@
 /**
- * 「要検証」の印：評価に疑問が残る判断に、振り返り画面から理由とメモをつける。
+ * 「要検証」の印：評価に疑問が残る判断に、振り返り・復習問題の画面から理由とメモをつける。
  * 印をつけた判断は、弱点分析の画面でまとめて再評価・書き出しできる。
  */
 import { useState } from 'react'
@@ -10,11 +10,16 @@ export function FlagEditor({
   decisionId,
   flag,
   onChange,
+  extra,
+  hint = '評価に納得できないときに印をつけ、あとで弱点分析の画面からまとめて再評価できます。',
 }: {
   gameId: string
   decisionId: number
   flag: FlagRecord | null
   onChange: (f: FlagRecord | null) => void
+  /** 印をつけるときに一緒に保存する項目（復習問題の答えなど） */
+  extra?: Pick<FlagRecord, 'answer'>
+  hint?: string
 }) {
   const [note, setNote] = useState(flag?.note ?? '')
   const [error, setError] = useState<string | null>(null)
@@ -33,12 +38,12 @@ export function FlagEditor({
           onClick={() => {
             const now = new Date().toISOString()
             setNote('')
-            persist({ gameId, decisionId, reasons: [], note: '', createdAt: now, updatedAt: now })
+            persist({ gameId, decisionId, reasons: [], note: '', createdAt: now, updatedAt: now, ...extra })
           }}
         >
           ⚑ 要検証にする
         </button>
-        <span className="muted small">評価に納得できないときに印をつけ、あとで弱点分析の画面からまとめて再評価できます。</span>
+        <span className="muted small">{hint}</span>
         {error && <span className="eval__error small">{error}</span>}
       </div>
     )

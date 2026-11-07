@@ -27,10 +27,12 @@ if (data.kind !== 'mahjong-analyst/flags') throw new Error('要検証の書き�
 console.log(`要検証 ${data.items.length}件（書き出し時 ${data.engineVersion} → 現在 ${EVALUATOR_VERSION}、1回 ${simulations} 試行 × 3）`)
 const seeds = [11, 22, 33]
 for (const { flag, record } of data.items) {
-  const orig = record.evaluation
-  const runs = seeds.map((seed) => evaluateDecision(record.snapshot, record.action, { mode: 'full', simulations, seed }))
+  // 復習問題で印をつけたものは、そのときの答えで再評価する
+  const orig = flag.answer?.evaluation ?? record.evaluation
+  const action = flag.answer?.action ?? record.action
+  const runs = seeds.map((seed) => evaluateDecision(record.snapshot, action, { mode: 'full', simulations, seed }))
   const hand = [...record.snapshot.hand].sort((a, b) => a.kind - b.kind).map((t) => kindName(t.kind))
-  console.log(`\n■ ${record.roundLabel} ${record.label}（元 ${orig.score}点・最善 ${orig.best?.label}）理由 [${flag.reasons.join(',')}] ${flag.note}`)
+  console.log(`\n■ ${record.roundLabel} ${flag.answer ? `${flag.answer.label}（復習の答え）` : record.label}（元 ${orig.score}点・最善 ${orig.best?.label}）理由 [${flag.reasons.join(',')}] ${flag.note}`)
   console.log(`  手牌 ${hand.join(' ')}  残り${record.snapshot.wallRemaining}枚`)
   console.log(`  再評価 ${runs.map((r) => `${r.score}点/最善${r.best?.label}`).join('  ')}`)
   const last = runs[runs.length - 1]

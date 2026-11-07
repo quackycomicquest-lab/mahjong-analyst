@@ -1,5 +1,7 @@
 /**
  * 弱点分析の画面の「要検証の判断」：印をつけた判断を一覧し、まとめて再評価・書き出す
+ * 項目を押すと、その局面（切った後の牌姿つき）と評価の中身を開いて確かめられる。
+ * 復習問題で印をつけた判断は、そのときの答えとその評価を対象にする。
  *
  * 再評価は試行回数を増やし（1回 1,200 試行）、乱数を変えて 3 回行う。
  * 書き出した JSON は bench/verify-flags.ts でさらに詳しく調べられる（局面・行動・評価をすべて含む）。
@@ -25,12 +27,23 @@ import {
   type GameRecord,
   type StoredEvaluation,
 } from '../storage/db'
+import type { Seat } from '../engine/game/types'
+import { EvaluationDetail } from './EvaluationPanel'
+import { FlagEditor } from './FlagEditor'
+import { Position } from './Position'
 import { requestEvaluation } from './evaluatorClient'
 import { scoreGrade } from './labels'
+import type { PlayerInfo } from './useGame'
 
 interface Item {
   flag: FlagRecord
   record: StoredEvaluation | null
+}
+
+/** 検証の対象：復習問題で印をつけたならそのときの答え、そうでなければ対局での判断 */
+function target(it: Item): Pick<StoredEvaluation, 'action' | 'label' | 'evaluation'> | null {
+  if (it.flag.answer) return it.flag.answer
+  return it.record
 }
 
 const REASON_LABEL = new Map(FLAG_REASONS)
@@ -40,6 +53,8 @@ export function FlagsSection({ games }: { games: GameRecord[] }) {
   const [items, setItems] = useState<Item[] | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [openKey, setOpenKey] = useState<string | null>(null)
+  const [level, setLevel] = useState<1 | 2 | 3>(1)
 
   useEffect(() => {
     let alive = true
@@ -57,10 +72,13 @@ export function FlagsSection({ games }: { games: GameRecord[] }) {
   }, [])
 
   const gameDate = useMemo(() => new Map(games.map((g) => [g.id, g.startedAt])), [games])
-  const summaryOf = (it: Item): VerifySummary | null =>
-    it.flag.verification && it.record?.evaluation.score != null
-      ? summarizeVerification(it.record.evaluation.score, it.record.evaluation.best?.label ?? '', it.flag.verification)
+  const gameNames = useMemo(() => new Map(games.map((g) => [g.id, g.playerNames])), [games])
+  const summaryOf = (it: Item): VerifySummary | null => {
+    const t = target(it)
+    return it.flag.verification && t?.evaluation.score != null
+      ? summarizeVerification(t.evaluation.score, t.evaluation.best?.label ?? '', it.flag.verification)
       : null
+  }
 
   if (error) return <p className="eval__error">要検証の判断を読み込めませんでした：{error}</p>
   if (!items) return null
@@ -81,7 +99,8 @@ export function FlagsSection({ games }: { games: GameRecord[] }) {
       try {
         const runs = []
         for (const seed of VERIFY_SEEDS) {
-          runs.push(await requestEvaluation(rec.snapshot, rec.action, 'full', { simulations: VERIFY_SIMULATIONS, seed }))
+          const action = it.flag.answer?.action ?? rec.action
+          runs.push(await requestEvaluation(rec.snapshot, action, 'full', { simulations: VERIFY_SIMULATIONS, seed }))
         }
         const flag: FlagRecord = {
           ...it.flag,
@@ -167,19 +186,32 @@ export function FlagsSection({ games }: { games: GameRecord[] }) {
           )}
           <ul className="flags__list">
             {items.map((it) => {
-              const ev = it.record?.evaluation
+              const t = target(it)
+              const ev = t?.evaluation
               const s = summaryOf(it)
+              const key = flagKey(it.flag.gameId, it.flag.decisionId)
+              const open = openKey === key
+              const names = gameNames.get(it.flag.gameId) ?? ['あなた', '他家1', '他家2', '他家3']
+              const players: PlayerInfo[] = names.map((name, seat) => ({ seat: seat as Seat, name, profile: null }))
               return (
-                <li key={flagKey(it.flag.gameId, it.flag.decisionId)} className="flag-item">
-                  <div className="flag-item__main">
+                <li key={key} className={`flag-item ${open ? 'is-open' : ''}`}>
+                  <button
+                    type="button"
+                    className="flag-item__main"
+                    aria-expanded={open}
+                    disabled={!it.record}
+                    onClick={() => {
+                      setOpenKey(open ? null : key)
+                      setLevel(1)
+                    }}
+                  >
                     <span className="muted small">
                       {formatDate(gameDate.get(it.flag.gameId) ?? it.flag.createdAt)}・{it.record?.roundLabel ?? '（評価が見つかりません）'}
+                      {it.flag.answer && <span className="badge badge--kind flag-item__source">復習の答え</span>}
                     </span>
                     <span>
-                      <b>{it.record?.label}</b>
-                      {ev?.score != null && (
-                        <span className={`tone--${scoreGrade(ev.score).tone}`}> {ev.score}点</span>
-                      )}
+                      <b>{t?.label}</b>
+                      {ev?.score != null && <span className={`tone--${scoreGrade(ev.score).tone}`}> {ev.score}点</span>}
                       {ev?.best && <span className="muted">（最善 {ev.best.label}）</span>}
                     </span>
                     {it.flag.reasons.length > 0 && (
@@ -198,17 +230,44 @@ export function FlagsSection({ games }: { games: GameRecord[] }) {
                         ：{VERDICT_LABELS[s.verdict]}
                       </span>
                     )}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--small"
-                    onClick={() => {
-                      setItems((xs) => xs!.filter((x) => x !== it))
-                      deleteFlag(it.flag.gameId, it.flag.decisionId).catch(() => {})
-                    }}
-                  >
-                    外す
+                    {it.record && <span className="flag-item__toggle muted small">{open ? '▲ 閉じる' : '▼ 局面と評価を見る'}</span>}
                   </button>
+                  {open && it.record && t && (
+                    <div className="flag-item__detail">
+                      {it.flag.answer && (
+                        <p className="muted small">
+                          対局では「{it.record.label}」（{it.record.evaluation.score ?? '—'}点）、復習問題では「{it.flag.answer.label}」と答えた判断です。
+                        </p>
+                      )}
+                      <Position record={{ ...it.record, action: t.action, evaluation: t.evaluation }} />
+                      <FlagEditor
+                        key={key}
+                        gameId={it.flag.gameId}
+                        decisionId={it.flag.decisionId}
+                        flag={it.flag}
+                        onChange={(f) => {
+                          if (f) setItems((xs) => xs!.map((x) => (x === it ? { ...x, flag: f } : x)))
+                          else {
+                            setItems((xs) => xs!.filter((x) => x !== it))
+                            setOpenKey(null)
+                          }
+                        }}
+                      />
+                      <EvaluationDetail ev={t.evaluation} label={t.label} players={players} level={level} setLevel={setLevel} />
+                    </div>
+                  )}
+                  {!open && (
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--small flag-item__remove"
+                      onClick={() => {
+                        setItems((xs) => xs!.filter((x) => x !== it))
+                        deleteFlag(it.flag.gameId, it.flag.decisionId).catch(() => {})
+                      }}
+                    >
+                      外す
+                    </button>
+                  )}
                 </li>
               )
             })}

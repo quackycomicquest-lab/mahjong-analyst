@@ -10,10 +10,11 @@ import { pickPractice, pickSession, schedule, type ReviewItem } from '../engine/
 import type { Evaluation } from '../engine/evaluator/types'
 import type { Action, Seat } from '../engine/game/types'
 import type { PlayerView } from '../engine/game/view'
-import { saveReviews } from '../storage/db'
+import { flagKey, listFlags, saveReviews, type FlagRecord } from '../storage/db'
 import type { ReviewRequest } from './AnalysisScreen'
 import { Melds } from './Board'
 import { EvaluationDetail } from './EvaluationPanel'
+import { FlagEditor } from './FlagEditor'
 import { Tile } from './Tile'
 import { loadCoachData, reviewKey, type CoachData, type CoachDecision } from './coachData'
 import { defaultEvaluationMode, requestEvaluation } from './evaluatorClient'
@@ -27,6 +28,8 @@ interface Answer {
   label: string
   evaluation: Evaluation | null
   error: string | null
+  /** 答えた時刻 */
+  at: string
 }
 
 export function ReviewScreen({ request, onExit }: { request: ReviewRequest; onExit: () => void }) {
@@ -36,6 +39,15 @@ export function ReviewScreen({ request, onExit }: { request: ReviewRequest; onEx
   const [answer, setAnswer] = useState<Answer | null>(null)
   const [results, setResults] = useState<number[]>([])
   const [level, setLevel] = useState<1 | 2 | 3>(1)
+  /** 要検証の印（復習問題からもつけられる） */
+  const [flags, setFlags] = useState<Map<string, FlagRecord>>(new Map())
+
+  useEffect(() => {
+    listFlags().then(
+      (fs) => setFlags(new Map(fs.map((f) => [flagKey(f.gameId, f.decisionId), f]))),
+      () => {},
+    )
+  }, [])
 
   useEffect(() => {
     loadCoachData().then((d) => {
@@ -100,7 +112,7 @@ export function ReviewScreen({ request, onExit }: { request: ReviewRequest; onEx
   const submit = (action: Action) => {
     if (answer) return
     const view = decision.record.snapshot
-    const a: Answer = { action, label: actionLabel(view, action), evaluation: null, error: null }
+    const a: Answer = { action, label: actionLabel(view, action), evaluation: null, error: null, at: new Date().toISOString() }
     setAnswer(a)
     requestEvaluation(view, action, defaultEvaluationMode()).then(
       (evaluation) => {
@@ -145,6 +157,23 @@ export function ReviewScreen({ request, onExit }: { request: ReviewRequest; onEx
               <Comparison
                 before={{ label: decision.record.label, score: decision.score }}
                 after={{ label: answer.label, score: answer.evaluation.score ?? 0 }}
+              />
+              <FlagEditor
+                key={flagKey(item.gameId, item.decisionId)}
+                gameId={item.gameId}
+                decisionId={item.decisionId}
+                flag={flags.get(flagKey(item.gameId, item.decisionId)) ?? null}
+                extra={{ answer: { action: answer.action, label: answer.label, evaluation: answer.evaluation, at: answer.at } }}
+                hint="この答えの評価に納得できないときに印をつけると、弱点分析の画面の「要検証の判断」にまとまります。"
+                onChange={(f) =>
+                  setFlags((m) => {
+                    const next = new Map(m)
+                    const k = flagKey(item.gameId, item.decisionId)
+                    if (f) next.set(k, f)
+                    else next.delete(k)
+                    return next
+                  })
+                }
               />
               <EvaluationDetail ev={answer.evaluation} label={answer.label} players={players} level={level} setLevel={setLevel} />
               <div className="modal__buttons">

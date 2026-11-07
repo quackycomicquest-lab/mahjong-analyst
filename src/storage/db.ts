@@ -11,7 +11,7 @@
  * 保存に失敗しても（プライベートブラウズなど）対局は続けられるよう、呼び出し側は例外を握りつぶしてよい。
  */
 import type { ReviewItem } from '../engine/coach/review'
-import type { EvaluationRecord } from '../engine/evaluator/types'
+import type { Evaluation, EvaluationRecord } from '../engine/evaluator/types'
 import type { Action, GameResult } from '../engine/game/types'
 
 export const DB_NAME = 'mahjong-analyst'
@@ -62,6 +62,15 @@ export interface FlagRecord {
   createdAt: string
   updatedAt: string
   verification?: FlagVerification
+  /** 復習問題で印をつけたとき：そのときの答えと評価。再評価はこの答えで行う */
+  answer?: FlagAnswer
+}
+
+export interface FlagAnswer {
+  action: Action
+  label: string
+  evaluation: Evaluation
+  at: string
 }
 
 export interface QuizRecord {
