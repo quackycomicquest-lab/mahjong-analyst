@@ -13,7 +13,7 @@ import { DEFAULT_OPPONENTS, type AiProfile } from '../engine/ai/profile'
 import type { Evaluation } from '../engine/evaluator/types'
 import { MahjongGame } from '../engine/game/game'
 import type { Action, Seat } from '../engine/game/types'
-import { getPlayerView, type PlayerView } from '../engine/game/view'
+import { autoDiscardAction, getPlayerView, type PlayerView } from '../engine/game/view'
 import { createRng } from '../engine/game/wall'
 import {
   saveEvaluation,
@@ -62,6 +62,8 @@ export const AI_SPEED_LABELS: [GameSettings['aiSpeed'], string][] = [
 ]
 
 const SAVE_DEBOUNCE_MS = 400
+/** 立直後の自動ツモ切りまでの最短の間（ツモった牌が見えるように） */
+const AUTO_DISCARD_MIN_MS = 450
 
 function makePlayers(strength: GameSettings['strength']): PlayerInfo[] {
   const profiles = DEFAULT_OPPONENTS.map((p) => ({ ...p, strength }))
@@ -168,6 +170,25 @@ export function useGame(prefs: GameSettings) {
       },
       ph.type === 'turn' ? (AI_DELAYS[prefs.aiSpeed] ?? AI_DELAYS.normal).turn : (AI_DELAYS[prefs.aiSpeed] ?? AI_DELAYS.normal).response,
     )
+    return () => clearTimeout(timer)
+  }, [game, version, bump, prefs.aiSpeed])
+
+  // 立直後は、ツモ切りしか選べないときは自動で切る（ツモ和了・カンを選べるときは自分で選ぶ）。
+  // 選択肢のない打牌なので評価もしない
+  useEffect(() => {
+    const g = game
+    if (!g) return
+    const ph = g.phase
+    if (ph.type !== 'turn' || ph.seat !== HUMAN) return
+    const v = getPlayerView(g, HUMAN)
+    const only = autoDiscardAction(v)
+    if (!only) return
+    const timer = setTimeout(() => {
+      if (g.phase.type !== 'turn' || !g.pendingSeats().includes(HUMAN)) return
+      g.apply(only)
+      playActionSound(only, soundRef.current)
+      bump()
+    }, Math.max(AUTO_DISCARD_MIN_MS, (AI_DELAYS[prefs.aiSpeed] ?? AI_DELAYS.normal).turn))
     return () => clearTimeout(timer)
   }, [game, version, bump, prefs.aiSpeed])
 

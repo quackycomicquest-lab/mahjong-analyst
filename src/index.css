@@ -2677,3 +2677,70 @@ html.phone-land .problem__name {
 }
 
 
+
+/* ------------------------------------------------------------------ 振り返り：最善と自分の選択の牌姿 */
+
+.after-hands {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.after-hand {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  /* 13枚＋切った牌（鳴きなら面子も）が1行に入る大きさに */
+  --meld-tw: clamp(14px, calc((100cqw - 70px) / 15.5), 30px);
+}
+.after-hand--best {
+  border-color: rgb(76 195 138 / 0.55);
+}
+.after-hand--chosen {
+  border-color: rgb(230 162 60 / 0.6);
+}
+.after-hand__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 0.85rem;
+}
+.after-hand--best .after-hand__head b {
+  color: rgb(76 195 138);
+}
+.after-hand--chosen .after-hand__head b {
+  color: rgb(230 162 60);
+}
+.after-hand__tiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 2px;
+}
+.after-hand__meld {
+  display: inline-flex;
+  gap: 1px;
+  margin-left: 8px;
+}
+.after-hand__cut {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+.after-hand__waits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+}
+.after-hand__waits .tile--mini {
+  --tw: 18px;
+}

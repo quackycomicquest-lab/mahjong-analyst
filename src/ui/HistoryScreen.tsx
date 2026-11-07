@@ -4,6 +4,8 @@
 import { useEffect, useState } from 'react'
 import { flagKey, listEvaluations, listFlags, listGames, type FlagRecord, type GameRecord, type StoredEvaluation } from '../storage/db'
 import type { Seat } from '../engine/game/types'
+import type { CandidateEvaluation } from '../engine/evaluator/types'
+import { handAfter, type HandAfter } from '../engine/coach/handAfter'
 import { EvaluationDetail } from './EvaluationPanel'
 import { FlagEditor } from './FlagEditor'
 import { Tile } from './Tile'
@@ -202,8 +204,15 @@ function Position({ record }: { record: StoredEvaluation }) {
   const v = record.snapshot
   const a = record.action
   const chosenId = a.type === 'discard' ? a.tileId : -1
-  const bestKind = record.evaluation.best?.kind
+  const ev = record.evaluation
+  const bestKind = ev.best?.kind
   const hand = [...v.hand].sort((x, y) => x.kind - y.kind || Number(y.red) - Number(x.red))
+  // 最善を選んだ場合と、実際に選んだ場合の牌姿
+  const chosenCand = ev.chosen ?? null
+  const bestCand = ev.best ?? null
+  const chosenAfter = handAfter(v, chosenCand?.action ?? a, chosenCand?.kind ?? null)
+  const sameAsBest = !!bestCand && !!chosenCand && bestCand.label === chosenCand.label
+  const bestAfter = bestCand && !sameAsBest ? handAfter(v, bestCand.action, bestCand.kind) : null
   return (
     <div className="position">
       <div className="position__meta">
@@ -227,6 +236,73 @@ function Position({ record }: { record: StoredEvaluation }) {
         )}
       </div>
       <p className="position__legend muted">黄色の枠：あなたの打牌 ／ 枠線：最善の打牌</p>
+      {(bestAfter || chosenAfter) && (
+        <div className="after-hands">
+          {bestAfter && bestCand && <AfterHand title="最善" cand={bestCand} after={bestAfter} tone="best" />}
+          {chosenAfter && (
+            <AfterHand
+              title={sameAsBest ? 'あなた（最善と同じ）' : 'あなた'}
+              cand={chosenCand}
+              after={chosenAfter}
+              tone={sameAsBest ? 'best' : 'chosen'}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 行動した後の牌姿と、その形の向聴数・受け入れ */
+function AfterHand({
+  title,
+  cand,
+  after,
+  tone,
+}: {
+  title: string
+  cand: CandidateEvaluation | null
+  after: HandAfter
+  tone: 'best' | 'chosen'
+}) {
+  const kinds = cand?.effectiveKinds ?? []
+  return (
+    <div className={`after-hand after-hand--${tone}`}>
+      <div className="after-hand__head">
+        <b>{title}</b>
+        <span>{cand?.label ?? ''}</span>
+        {cand && (
+          <span className="muted">
+            {cand.shanten <= 0 ? '聴牌' : `${cand.shanten}向聴`}・{cand.shanten <= 0 ? '待ち' : '受け入れ'} {cand.ukeire}枚
+          </span>
+        )}
+      </div>
+      <div className="after-hand__tiles">
+        {after.tiles.map((t) => (
+          <Tile key={t.id} tile={t} size="meld" />
+        ))}
+        {after.meld && (
+          <span className="after-hand__meld">
+            {after.meld.map((t) => (
+              <Tile key={t.id} tile={t} size="meld" />
+            ))}
+          </span>
+        )}
+        {after.discarded && (
+          <span className="after-hand__cut">
+            <span className="muted">切り</span>
+            <Tile tile={after.discarded} size="meld" />
+          </span>
+        )}
+      </div>
+      {kinds.length > 0 && (
+        <div className="after-hand__waits">
+          <span className="muted">{cand!.shanten <= 0 ? '待ち' : '有効牌'}</span>
+          {kinds.map((k) => (
+            <Tile key={k} tile={{ id: -100 - k, kind: k, red: false }} size="mini" />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

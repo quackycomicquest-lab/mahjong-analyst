@@ -170,7 +170,9 @@ export function Controls({ view, players, activeSeat, onAct }: Props) {
   if (pass) buttons.push({ key: 'pass', label: 'スキップ', tone: 'plain', onClick: () => onAct(pass) })
 
   let status = ''
-  if (riichiMode) status = '立直する牌を選んでください'
+  const autoDiscard = myTurn && acts.length === 1 && view.players[view.seat].riichi
+  if (autoDiscard) status = '立直中：自動でツモ切りします'
+  else if (riichiMode) status = '立直する牌を選んでください'
   else if (myTurn) status = coarse ? '切る牌をタップ（もう一度タップで確定）' : '切る牌をクリック（←→で選択・Enterで確定）'
   else if (pass) status = `${players[view.lastDiscard?.seat ?? 0].name}の打牌に応答できます`
   else if (activeSeat !== null && activeSeat !== view.seat) status = `${players[activeSeat].name}の手番`

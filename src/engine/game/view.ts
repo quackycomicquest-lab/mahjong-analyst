@@ -69,3 +69,10 @@ export function getPlayerView(game: MahjongGame, seat: Seat): PlayerView {
   }
   return view
 }
+
+/** 立直中で、選べる行動がツモ切りだけなら、その打牌を返す */
+export function autoDiscardAction(view: PlayerView): Action | null {
+  if (!view.players[view.seat].riichi) return null
+  const acts = view.legalActions
+  return acts.length === 1 && acts[0].type === 'discard' ? acts[0] : null
+}

@@ -9,6 +9,8 @@ import { classifyDecision, isAllLast } from './classify'
 import { enroll, isDue, isMastered, pickPractice, pickSession, schedule } from './review'
 import { actualCellId, allCells, answerLabel, basePayment, paymentLabel, scoreTable, scoreTableFor } from './scoreQuiz'
 import { summarizeVerification } from './flags'
+import { handAfter } from './handAfter'
+import { autoDiscardAction } from '../game/view'
 import type { HandValue } from '../rules/score'
 
 const discard = (view: PlayerView, n: string, riichi = false): Action =>
@@ -195,5 +197,42 @@ describe('要検証の再評価', () => {
   })
   it('最善手が変われば bestChanged', () => {
     expect(summarizeVerification(50, '1索', v([50, 50, 50], ['1索', '2筒', '1索'])).verdict).toBe('bestChanged')
+  })
+})
+
+describe('振り返りの牌姿', () => {
+  it('打牌：その牌を抜いた手牌になる', () => {
+    const v = makeView({ hand: '23m456p789s1357z36s' })
+    const a = discard(v, '1z')
+    const after = handAfter(v, a, null)!
+    expect(after.tiles).toHaveLength(13)
+    expect(after.discarded!.kind).toBe(parseHand('1z')[0].kind)
+    expect(after.tiles.some((t) => t.id === (a as { tileId: number }).tileId)).toBe(false)
+  })
+
+  it('ポン：面子を外に出し、鳴いた後に切る牌を抜く。スキップは手牌そのまま', () => {
+    const v = makeView({
+      hand: '55z234m57p13s689s9m',
+      response: { from: 3, tile: '5z', actions: (_t, hand) => [{ type: 'pon', seat: 0, tileIds: hand.filter((h) => h.kind === parseHand('5z')[0].kind).map((h) => h.id) as [number, number] }] },
+    })
+    const pon = v.legalActions.find((x) => x.type === 'pon')!
+    const after = handAfter(v, pon, parseHand('9m')[0].kind)!
+    expect(after.meld).toHaveLength(3)
+    expect(after.tiles).toHaveLength(10)
+    expect(after.discarded!.kind).toBe(parseHand('9m')[0].kind)
+    expect(handAfter(v, { type: 'pass', seat: 0 }, null)!.tiles).toHaveLength(13)
+  })
+})
+
+describe('立直後の自動ツモ切り', () => {
+  it('立直中でツモ切りしか選べないときだけ自動で切る', () => {
+    const v = makeView({ hand: '123m456p789s1355z9m' })
+    expect(autoDiscardAction(v)).toBeNull() // 立直していない
+    v.players[0].riichi = true
+    v.legalActions = [{ type: 'discard', seat: 0, tileId: v.drawn!.id }]
+    expect(autoDiscardAction(v)).toEqual(v.legalActions[0])
+    // ツモ和了やカンを選べるときは自分で選ぶ
+    v.legalActions = [{ type: 'tsumo', seat: 0 }, ...v.legalActions]
+    expect(autoDiscardAction(v)).toBeNull()
   })
 })
