@@ -61,7 +61,7 @@ export function findThreats(view: PlayerView): Threat[] {
 /**
  * 危険度の分類。
  * - genbutsu：現物（立直後に通った牌を含む）
- * - honor-sN：字牌（自分から N 枚見えている。3 は 3 枚以上）
+ * - honor-sN：字牌（自分から N 枚見えている）。4 枚とも見えている字牌は genbutsu と同じ扱い
  * - suji-19 / suji-28 / suji-37：スジの端・2/8・3/7
  * - nakasuji / katasuji：4〜6 の両スジ・片スジ
  * - musuji-19 / musuji-28 / musuji-37 / musuji-456：無スジ
@@ -76,7 +76,8 @@ export function dangerCategory(
 ): string {
   if (safeKinds.has(kind)) return 'genbutsu'
   if (level === 1) return 'unknown'
-  if (isHonor(kind)) return `honor-s${Math.min(seen[kind], 3)}`
+  // 字牌は4枚とも見えていれば（最後の1枚を自分が持っている）、国士無双以外で当たらない
+  if (isHonor(kind)) return seen[kind] >= 4 ? 'genbutsu' : `honor-s${Math.min(seen[kind], 3)}`
 
   const rank = kind % 9 // 0〜8
   const base = kind - rank

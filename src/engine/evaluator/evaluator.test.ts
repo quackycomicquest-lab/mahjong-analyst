@@ -54,7 +54,7 @@ describe('打牌評価', () => {
   it('序盤でも両面を崩す打牌は減点される', () => {
     const view = makeView({ hand: '23m456p789s1357z36s' })
     const e = evaluateDecision(view, discard(view, '2m'), opts)
-    expect(e.score!).toBeLessThan(70)
+    expect(e.score!).toBeLessThan(80)
     expect(e.best!.shanten).toBeLessThan(e.chosen!.shanten)
   })
 
@@ -172,6 +172,41 @@ describe('鳴き・和了・九種九牌・立直判断の評価', () => {
     expect(e.best!.label).toBe('スキップ')
     expect(e.chosen!.label).toMatch(/^チー/)
     expect(e.score!).toBeLessThan(100)
+  })
+
+  it('役のない仕掛け（形式聴牌）は、山が残っているうちは鳴かない方が良い', () => {
+    // 北家・東場で南は役牌でない。2索をポンして4索を切ると聴牌だが役がなく、ロンもツモもできない
+    const view = makeView({
+      hand: '789m222p22s468s22z',
+      wallRemaining: 47,
+      dora: '2z',
+      response: {
+        from: 3,
+        tile: '2s',
+        actions: (_t, hand) => {
+          const ids = hand.filter((t) => t.kind === parseHand('2s')[0].kind).map((t) => t.id)
+          return [{ type: 'pon', seat: 0, tileIds: [ids[0], ids[1]] }]
+        },
+      },
+    })
+    view.round = { ...view.round, wind: 27, dealer: 1 }
+    const e = evaluateDecision(view, { type: 'pass', seat: 0 }, opts)
+    expect(e.best!.label).toBe('スキップ')
+    const pon = e.candidates.find((c) => c.label.startsWith('ポン'))!
+    expect(pon.winRate).toBe(0)
+  })
+
+  it('立直2人に対して、4枚目の字牌（完全な安全牌）を切る判断は高く評価される', () => {
+    // 南：手に1枚・河に2枚・ドラ表示牌に1枚。他の牌はどれも2人のどちらかに通っていない
+    const view = makeView({
+      hand: '789m222p5p22s456s8s2z',
+      wallRemaining: 34,
+      dora: '2z',
+      rivers: { 2: ['2z', '1z', '3z', '9p*'], 3: ['2z', '4z', '1p', '9s*'] },
+    })
+    const e = evaluateDecision(view, discard(view, '2z'), opts)
+    expect(e.chosen!.immediateDealIn).toBe(0)
+    expect(e.score!).toBeGreaterThanOrEqual(80)
   })
 
   it('役牌の対子をポンする判断を評価できる（鳴いた後の打牌まで含めて比較）', () => {

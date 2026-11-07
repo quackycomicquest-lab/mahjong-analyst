@@ -43,6 +43,8 @@ export interface CalibrationData {
    * unseen：打った時点で脅威が見えていなかった打牌（ダマ聴牌などへの放銃）
    */
   discardDealIn?: { all: number[]; unseen: number[]; loss: number }
+  /** 他家の立直者がいないとき、他家の打牌1回あたりにそれが立直宣言である割合 [山の残り枚数÷10]（bench/calibrate-riichi.ts） */
+  riichiAppear?: { byWall: number[]; n?: number[]; games?: number }
 }
 
 /** 検証用：環境変数 MAHJONG_NO_CALIBRATION=1 なら実測値を使わず既定値だけで動かす（Node 実行時のみ） */
@@ -149,4 +151,11 @@ export function futureDealIn(wall: number, threatsVisible: boolean): { rate: num
   if (!d) return { rate: 0, loss: 0 }
   const w = Math.max(0, Math.min(d.all.length - 1, Math.floor(wall / 10)))
   return { rate: threatsVisible ? d.unseen[w] : d.all[w], loss: d.loss }
+}
+
+/** 他家の立直者がいないとき、他家の打牌1回あたりに新たな立直が出る確率（山の残り枚数 wall の時点） */
+export function riichiAppearRate(wall: number): number {
+  const r = CALIBRATION.riichiAppear
+  if (r) return r.byWall[Math.max(0, Math.min(r.byWall.length - 1, Math.floor(wall / 10)))]
+  return wall >= 20 ? 0.03 : 0.01
 }

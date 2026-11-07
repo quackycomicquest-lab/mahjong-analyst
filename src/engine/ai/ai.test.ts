@@ -7,7 +7,7 @@ import type { PlayerView } from '../game/view'
 import { createRng } from '../game/wall'
 import { kindName, kindOf, parseHand, type PhysicalTile } from '../rules/tile'
 import { makeView } from '../testing/makeView'
-import { findThreats, seenCounts, tileDanger } from './danger'
+import { dangerCategory, findThreats, seenCounts, tileDanger } from './danger'
 import { createAiBot, decide } from './player'
 import { DEFAULT_OPPONENTS, makeProfile } from './profile'
 
@@ -37,6 +37,18 @@ describe('危険度の推定', () => {
     expect(d('7m')).toBeLessThan(d('5s'))
     expect(d('3p')).toBeLessThan(d('5s')) // 3p は 6p のスジ
     expect(d('5s')).toBeGreaterThan(5) // 中張の無スジは高い
+  })
+
+  it('4枚とも見えている字牌（最後の1枚）は現物と同じく安全', () => {
+    // 南：自分の手に1枚、立直者以外の河に2枚、ドラ表示牌に1枚
+    const v = makeView({ hand: '123m456p789s12z345s', rivers: { 1: ['2z'], 2: ['6p*'], 3: ['2z'] }, dora: '2z' })
+    const [t] = findThreats(v)
+    const south = parseHand('2z')[0].kind
+    expect(dangerCategory(south, t.safeKinds, seenCounts(v), 3)).toBe('genbutsu')
+    expect(tileDanger(south, t, seenCounts(v), 3)).toBe(0)
+    // 3枚見えているだけなら単騎の可能性が残る
+    const v3 = makeView({ hand: '123m456p789s12z345s', rivers: { 1: ['2z'], 2: ['6p*'] }, dora: '2z' })
+    expect(dangerCategory(south, findThreats(v3)[0].safeKinds, seenCounts(v3), 3)).toBe('honor-s3')
   })
 
   it('初級は現物しか区別しない', () => {

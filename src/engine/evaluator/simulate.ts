@@ -17,6 +17,10 @@
  *   （役牌のポン以外は鳴いた後が2向聴以内のとき。チーは上家の捨て牌だけ。立直中・脅威があって遠いときは鳴かない）
  *   鳴いたらすぐ打牌し、間の打ち手を飛ばして手番が進む
  * - 脅威（立直・2副露以上）があり2向聴以上なら、最も安全な牌を切って降りる
+ * - 脅威があって1向聴なら、向聴数を保てる牌のうち安全なものを切る（回し打ち）。それが危険なら降りる
+ *   （立直が2人以上なら、ほぼ現物でしか回さず、聴牌に取るために危険な牌も切らない）
+ * - 立直者がいるとき、立直の後に誰かが切って通った牌は、その立直者には以後安全（現物）になる
+ * - 役のない仕掛け（形式聴牌）は和了できず、脅威が見えたら降りる。流局時の聴牌料は「他家の立直が出なかった割合」だけ見込む
  * - 門前で聴牌したら立直（立直後はツモ切り）。ただし打牌時点で聴牌の候補は、その候補の立直・ダマのまま進める
  */
 
@@ -42,6 +46,14 @@ export interface SimSetup {
   dealInProb: Float64Array
   /** 種類ごとの放銃時の失点 */
   dealInLoss: Float64Array
+  /** dealInProb のうち立直者に対する分（立直の後にその牌が通れば、以後は安全になる） */
+  riichiDealInProb: Float64Array
+  /** 立直者が見えているか */
+  riichiVisible: boolean
+  /** 見えている立直者の数 */
+  riichiCount: number
+  /** 自分の t 回目のツモまでの他家の打牌1回ごとに、他家が新たに立直する確率（立直者が見えていないとき） */
+  riichiAppear: Float64Array
   /** 自分の t 回目のツモまでの他家の打牌1回ごとに、自分以外の和了で局が終わる確率 */
   otherEndHazard: Float64Array
   /** 同上（自分が立直しているとき。他家が守りに回るので下がる） */
@@ -96,6 +108,13 @@ const TENPAI_BONUS = drawPayment(true)
 const NOTEN_PENALTY = -drawPayment(false)
 const RIICHI_BONUS_RATE = riichiBonusRate()
 
+/**
+ * 脅威があるときの1向聴：向聴数を保てる最も安全な牌の放銃率がこれを超えるなら降りる。
+ * 立直が2人以上なら、ほぼ現物でしか回さない
+ */
+const ONE_SHANTEN_PUSH_LIMIT = 0.05
+const ONE_SHANTEN_PUSH_LIMIT_MULTI = 0.01
+
 function fastShanten(c: number[], meldCount: number): number {
   let s = regularShantenUnadjusted(c, meldCount)
   if (meldCount === 0) s = Math.min(s, chiitoitsuShanten(c), kokushiShanten(c))
@@ -145,20 +164,67 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
     if (cand.kind !== null) furiten.add(cand.kind)
     for (const k of cand.extraFuriten ?? []) furiten.add(k)
 
+    // 牌ごとの放銃率（立直の後に通った牌は、その立直者には安全になるので下がっていく）
+    const danger = Float64Array.from(setup.dealInProb)
+    const passed = (k: TileKind) => {
+      if (setup.riichiDealInProb[k] > 0) danger[k] = Math.max(0, setup.dealInProb[k] - setup.riichiDealInProb[k])
+    }
+    // 他家の立直がまだ出ていない確率（形式聴牌を流局まで保てる見込み）
+    let calm = 1
+
     // 打牌した瞬間の放銃
     let alive = 1
     let outcome = 0
     let dealIn = 0
     // future：この先の打牌なら、今は見えていない脅威への放銃率も足す（降りているときは半分）
     const discardRisk = (k: TileKind, future = 0) => {
-      const p1 = setup.dealInProb[k]
+      const p1 = danger[k]
       const p = Math.min(0.5, p1 + future)
       const loss = p > 0 ? (p1 * setup.dealInLoss[k] + (p - p1) * setup.futureDealInLoss) / p : 0
       outcome -= alive * p * loss
       dealIn += alive * p
       alive *= 1 - p
     }
-    if (cand.kind !== null) discardRisk(cand.kind)
+    if (cand.kind !== null) {
+      discardRisk(cand.kind)
+      passed(cand.kind)
+    }
+
+    /**
+     * 今の手（3n+1枚、聴牌）が、役のある和了をできる待ちを持つか（門前ならツモ・立直で役が付く）。
+     * 評価する時点で既に仕掛けている手（この候補の鳴きを含む）だけを調べる。シミュレーション中の鳴きは
+     * 役の見込みを大まかにしか見ていないので、ここで厳しくすると鳴きの方針の粗さが候補の差に出てしまう
+     */
+    const hasYakuWait = (): boolean => {
+      if (menzen || initialMenzen) return true
+      for (const w of waitingKinds(c, meldCount)) {
+        if (c[w] >= 4) continue
+        c[w]++
+        const v = winValue(setup, cand, melds, menzen, c, w, false, false) || winValue(setup, cand, melds, menzen, c, w, true, false)
+        c[w]--
+        if (v > 0) return true
+      }
+      return false
+    }
+    /** ツモ前の手（ツモ牌 draw を除いた13枚）で hasYakuWait を調べる */
+    const yakuBeforeDraw = (draw: TileKind): boolean => {
+      c[draw]--
+      const ok = hasYakuWait()
+      c[draw]++
+      return ok
+    }
+    /** 最も安全な牌 */
+    const safestTile = (): TileKind => {
+      let best = Infinity
+      let out: TileKind = 0
+      for (let k = 0; k < KIND_COUNT; k++) {
+        if (c[k] > 0 && danger[k] < best) {
+          best = danger[k]
+          out = k
+        }
+      }
+      return out
+    }
 
     /** 他家の捨て牌 x を鳴くか判断し、鳴いたら打牌まで済ませて true */
     const tryCall = (x: TileKind, canChi: boolean, t: number): boolean => {
@@ -191,7 +257,7 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
         const dBest =
           ties.length === 0
             ? -1
-            : chooseAdvance(c, ties, sBest, meldCount + 1, setup.dealInProb, avail, furiten, effCache)
+            : chooseAdvance(c, ties, sBest, meldCount + 1, danger, avail, furiten, effCache)
         const ok =
           dBest >= 0 &&
           sBest < shanten &&
@@ -219,6 +285,7 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
       furiten.add(best.d)
       shanten = best.s
       discardRisk(best.d, setup.futureDealIn[t] ?? 0)
+      passed(best.d)
       return true
     }
 
@@ -234,6 +301,7 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
       let called = false
       for (let j = 0; j < others && idx < m; j++) {
         alive *= 1 - (riichi ? setup.otherEndHazardSelfRiichi[t] : setup.otherEndHazard[t])
+        calm *= 1 - (setup.riichiAppear[t] ?? 0)
         const tile = pool[idx++]
         // 聴牌していればロンの機会
         if (shanten === 0) {
@@ -251,6 +319,7 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
           }
           c[tile]--
         }
+        passed(tile)
         // 鳴き（チーは上家＝この直前の打ち手 j=2 の捨て牌だけ）。鳴いたら間の打ち手は飛ばし、自分のツモもない。
         // 他家は欲しい牌を一様には切らないので、ロンと同じ割合で機会を間引く（候補間で同じ判定になるよう、試行番号と山の位置で決める）
         if (callChance(i, idx) < RON_RATE_DAMA && tryCall(tile, j === 2, t)) {
@@ -277,20 +346,39 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
       }
 
       let discard: TileKind = draw
+      let recompute = false
       if (!riichi) {
+        const s14 = fastShanten(c, meldCount)
+        const advancing = s14 < shanten && s14 >= 0
         if (setup.hasThreat && shanten >= 2) {
           // 降り：最も安全な牌
-          let best = Infinity
+          discard = safestTile()
+        } else if (setup.hasThreat && shanten === 0 && s14 >= 0 && !yakuBeforeDraw(draw)) {
+          // 役のない聴牌（形式聴牌）は和了できないので、脅威には降りる
+          discard = safestTile()
+          recompute = true
+        } else if (setup.hasThreat && shanten === 1 && !advancing) {
+          // 1向聴：向聴数を保てる牌のうち最も安全なもの（回し打ち）。それも危険なら降りる
+          let keep = -1
+          let keepDanger = Infinity
           for (let k = 0; k < KIND_COUNT; k++) {
-            if (c[k] > 0 && setup.dealInProb[k] < best) {
-              best = setup.dealInProb[k]
-              discard = k
+            if (c[k] === 0 || danger[k] >= keepDanger) continue
+            c[k]--
+            if (fastShanten(c, meldCount) === shanten) {
+              keep = k
+              keepDanger = danger[k]
             }
+            c[k]++
+          }
+          const limit = setup.riichiCount >= 2 ? ONE_SHANTEN_PUSH_LIMIT_MULTI : ONE_SHANTEN_PUSH_LIMIT
+          if (keep >= 0 && keepDanger <= limit) discard = keep
+          else {
+            discard = safestTile()
+            recompute = true
           }
         } else {
-          const s14 = fastShanten(c, meldCount)
           // s14 === -1 は役なしで和了できなかった形。ツモ切りして聴牌を維持する
-          if (s14 < shanten && s14 >= 0) {
+          if (advancing) {
             // 向聴数が進む打牌の中から、安全なものを選ぶ。
             // 聴牌に取るときは、自分の河にある牌（と今切る牌）が当たりにならない打牌を優先（フリテン回避）
             const options: TileKind[] = []
@@ -300,8 +388,12 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
               if (fastShanten(c, meldCount) === s14) options.push(k)
               c[k]++
             }
-            discard = chooseAdvance(c, options, s14, meldCount, setup.dealInProb, avail, furiten, effCache)
-            shanten = s14
+            discard = chooseAdvance(c, options, s14, meldCount, danger, avail, furiten, effCache)
+            if (setup.riichiCount >= 2 && danger[discard] > ONE_SHANTEN_PUSH_LIMIT_MULTI) {
+              // 立直2人以上：聴牌に取るために危険な牌を切るなら、降りる
+              discard = safestTile()
+              recompute = true
+            } else shanten = s14
           } else if (s14 >= 0 && shanten > 0) {
             // 形の改善：ツモ牌の方が、手の中で最も孤立した牌より役に立つなら入れ替える（向聴数が戻らない場合のみ）
             let worst = -1
@@ -325,8 +417,10 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
       }
       c[discard]--
       furiten.add(discard)
-      const folding = !riichi && setup.hasThreat && shanten >= 2
+      if (recompute) shanten = fastShanten(c, meldCount)
+      const folding = !riichi && setup.hasThreat && (shanten >= 2 || recompute)
       discardRisk(discard, (setup.futureDealIn[t] ?? 0) * (folding ? 0.5 : 1))
+      passed(discard)
 
       // 門前で（新たに）聴牌したら立直する
       if (!riichi && !decidedAtStart && menzen && shanten === 0 && t < setup.ownTurns - 1) {
@@ -335,7 +429,15 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
       }
     }
 
-    if (!ended) outcome += alive * (shanten === 0 ? TENPAI_BONUS : -NOTEN_PENALTY)
+    if (!ended) {
+      if (shanten !== 0) outcome -= alive * NOTEN_PENALTY
+      else if (hasYakuWait()) outcome += alive * TENPAI_BONUS
+      else {
+        // 形式聴牌：他家の立直が出れば降りるので、聴牌のまま流局できるのは立直が出なかった場合だけ
+        const keep = setup.riichiVisible ? 0 : calm
+        outcome += alive * (keep * TENPAI_BONUS - (1 - keep) * NOTEN_PENALTY)
+      }
+    }
     // 立直棒：立直後に和了できなかった分は失う
     outcome -= RIICHI_STICK * Math.max(0, stickWeight - wonAfterRiichi)
 

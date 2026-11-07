@@ -17,7 +17,7 @@
  */
 
 import { findThreats, seenCounts, tileDanger } from '../ai/danger'
-import { dealInLoss as dealInLossFor, futureDealIn, otherEndHazard } from '../calibration/calibration'
+import { dealInLoss as dealInLossFor, futureDealIn, otherEndHazard, riichiAppearRate } from '../calibration/calibration'
 import { chiForbidden } from '../game/game'
 import type { Action, CalledMeld, Seat } from '../game/types'
 import type { PlayerView } from '../game/view'
@@ -47,6 +47,14 @@ const SCALE_MIN = 500
 const SCALE_MAX = 1000
 /** 鳴いた後の打牌は、向聴数・受け入れの上位この数だけシミュレーションする */
 const CALL_DISCARD_VARIANTS = 3
+/**
+ * 期待値の上位この数の候補と、選んだ候補は、試行を足して比べ直す（v0.4.0）。
+ * 最善手と評価点を決めるのはこれらの差なので、ここに試行を集めると少ない計算でぶれが減る
+ * （軽量評価の 100 試行では、同じ局面でも評価点が 20〜40 点ぶれていた）。
+ */
+const REFINE_TOP = 4
+/** 足す試行の数（最初の試行回数の何倍か） */
+const REFINE_FACTOR = 2
 
 type Group = 'discard' | 'pass' | 'call' | 'win' | 'kan' | 'kyuushu'
 
@@ -75,6 +83,9 @@ interface Result {
   ev: CandidateEvaluation
   outcomes: Float64Array
   mean: number
+  /** 試行を足すときに使う（固定の収支なら fixed） */
+  spec: CandSpec
+  variant: Variant | null
 }
 
 export function evaluateDecision(
@@ -116,10 +127,17 @@ export function evaluateDecision(
   results.sort((a, b) => b.mean - a.mean)
 
   const chosenKey = actionKey(view, action)
-  const chosen = results.find((r) => r.key === chosenKey)
-  if (!chosen) {
+  const chosen0 = results.find((r) => r.key === chosenKey)
+  if (!chosen0) {
     return { ...base, statusReason: '選んだ行動が合法手の中に見つかりません', elapsedMs: now() - t0 }
   }
+  // 上位の候補と選んだ候補に試行を足す（同じ乱数列の続きを使うので、候補どうしの比較はそのまま対になる）
+  const refine = new Set([...results.slice(0, REFINE_TOP), chosen0])
+  if (results.length > 1) {
+    for (const r of refine) refineResult(r, setup, simulations * REFINE_FACTOR, seed + simulations * 7919)
+    results.sort((a, b) => b.mean - a.mean)
+  }
+  const chosen = chosen0
 
   // 最善候補：期待値が最も高い候補と「誤差の範囲で同等」な候補のうち、
   // 打牌同士なら向聴数が小さく受け入れが多いもの（シミュレーションのばらつきで形の悪い手を最善と示さない）
@@ -458,6 +476,8 @@ function runSpec(spec: CandSpec, setup: SimSetup, seen: number[], n: number, see
       group: spec.group,
       outcomes,
       mean: spec.fixed.ev,
+      spec,
+      variant: null,
       ev: {
         action: spec.action,
         kind: null,
@@ -490,6 +510,8 @@ function runSpec(spec: CandSpec, setup: SimSetup, seen: number[], n: number, see
     group: spec.group,
     outcomes: sim.outcomes,
     mean: sim.mean,
+    spec,
+    variant: v,
     ev: {
       action: spec.action,
       kind: v.kind,
@@ -505,6 +527,36 @@ function runSpec(spec: CandSpec, setup: SimSetup, seen: number[], n: number, see
       ev: Math.round(sim.mean),
       evStdError: Math.round(sim.stdError),
     },
+  }
+}
+
+/** 候補に extra 回の試行を足し、期待値・和了率などを合算し直す（r を書き換える） */
+function refineResult(r: Result, setup: SimSetup, extra: number, seed: number): void {
+  const n = r.outcomes.length
+  const merged = new Float64Array(n + extra)
+  merged.set(r.outcomes)
+  if (!r.variant) {
+    merged.fill(r.mean, n)
+    r.outcomes = merged
+    return
+  }
+  const sim = simulateCandidate(setup, r.variant.sim, extra, seed)
+  merged.set(sim.outcomes, n)
+  const total = n + extra
+  const mean = (r.mean * n + sim.mean * extra) / total
+  let v = 0
+  for (const o of merged) v += (o - mean) ** 2
+  const wins = r.ev.winRate * n + sim.winRate * extra
+  const winValue = wins > 0 ? (r.ev.winValue * r.ev.winRate * n + sim.winValue * sim.winRate * extra) / wins : 0
+  r.outcomes = merged
+  r.mean = mean
+  r.ev = {
+    ...r.ev,
+    winRate: wins / total,
+    winValue: Math.round(winValue),
+    dealInRate: (r.ev.dealInRate * n + sim.dealInRate * extra) / total,
+    ev: Math.round(mean),
+    evStdError: Math.round(Math.sqrt(v / (total - 1) / total)),
   }
 }
 
@@ -539,15 +591,20 @@ export function buildSetup(view: PlayerView): SimSetup {
   const openThreats = threats.length - riichiThreats
   const dealInProb = new Float64Array(KIND_COUNT)
   const dealInLoss = new Float64Array(KIND_COUNT)
+  const riichiDealInProb = new Float64Array(KIND_COUNT)
   for (const t of threats) {
     const loss = dealInLossFor(t.type, t.seat === view.round.dealer)
     for (let k = 0; k < KIND_COUNT; k++) {
       const p = tileDanger(k, t, seen, 3) / 100
       dealInLoss[k] = dealInProb[k] + p > 0 ? (dealInLoss[k] * dealInProb[k] + loss * p) / (dealInProb[k] + p) : 0
       dealInProb[k] += p
+      if (t.riichi) riichiDealInProb[k] += p
     }
   }
-  for (let k = 0; k < KIND_COUNT; k++) dealInProb[k] = Math.min(dealInProb[k], 0.5)
+  for (let k = 0; k < KIND_COUNT; k++) {
+    dealInProb[k] = Math.min(dealInProb[k], 0.5)
+    riichiDealInProb[k] = Math.min(riichiDealInProb[k], dealInProb[k])
+  }
 
   return {
     view,
@@ -561,6 +618,10 @@ export function buildSetup(view: PlayerView): SimSetup {
     otherEndHazard: hazardSeq(view.wallRemaining, riichiThreats, openThreats, false),
     otherEndHazardSelfRiichi: hazardSeq(view.wallRemaining, riichiThreats, openThreats, true),
     hasThreat: threats.length > 0,
+    riichiDealInProb,
+    riichiVisible: riichiThreats > 0,
+    riichiCount: riichiThreats,
+    riichiAppear: riichiAppearSeq(view.wallRemaining),
     futureDealIn: futureDealInSeq(view.wallRemaining, threats.length > 0),
     futureDealInLoss: futureDealIn(view.wallRemaining, threats.length > 0).loss,
     // 立直後に当たり牌を見逃したフリテン（その局ずっとロンできない）は、全ての牌を河にあるものとして扱う
@@ -575,6 +636,13 @@ function futureDealInSeq(wall: number, threatsVisible: boolean): Float64Array {
   const seq = new Float64Array(turns)
   // t 回目のツモ後の打牌は、山が 4(t+1) 枚ほど減った時点
   for (let t = 0; t < turns; t++) seq[t] = futureDealIn(Math.max(0, wall - 4 * (t + 1)), threatsVisible).rate
+  return seq
+}
+
+function riichiAppearSeq(wall: number): Float64Array {
+  const turns = Math.floor(wall / 4)
+  const seq = new Float64Array(turns)
+  for (let t = 0; t < turns; t++) seq[t] = riichiAppearRate(Math.max(0, wall - 4 * t))
   return seq
 }
 
@@ -701,8 +769,9 @@ const pct = (x: number) => `${Math.round(x * 100)}%`
 
 // ---------------------------------------------------------------------------
 
+/** 対になった試行の差の標準誤差。試行回数が違う（片方だけ試行を足した）ときは、共通の分だけで比べる */
 function pairedStdError(a: Float64Array, b: Float64Array): number {
-  const n = a.length
+  const n = Math.min(a.length, b.length)
   if (n < 2) return 0
   let mean = 0
   for (let i = 0; i < n; i++) mean += a[i] - b[i]
