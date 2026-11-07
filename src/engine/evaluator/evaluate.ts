@@ -18,6 +18,7 @@
 
 import { findThreats, seenCounts, tileDanger } from '../ai/danger'
 import {
+  damaHazardFactor,
   dealInLoss as dealInLossFor,
   futureDealIn,
   otherEndHazard,
@@ -624,6 +625,7 @@ export function buildSetup(view: PlayerView): SimSetup {
     otherEndHazard: hazardSeq(view.wallRemaining, riichiThreats, openThreats, false),
     otherEndHazardSelfRiichi: hazardSeq(view.wallRemaining, riichiThreats, openThreats, true),
     otherWinLoss: otherWinLoss(riichiThreats, view.seat === view.round.dealer),
+    damaHazardFactor: [damaFactorSeq(view.wallRemaining, false, riichiThreats), damaFactorSeq(view.wallRemaining, true, riichiThreats)],
     hasThreat: threats.length > 0,
     riichiDealInProb,
     riichiVisible: riichiThreats > 0,
@@ -643,6 +645,13 @@ function futureDealInSeq(wall: number, threatsVisible: boolean): Float64Array {
   const seq = new Float64Array(turns)
   // t 回目のツモ後の打牌は、山が 4(t+1) 枚ほど減った時点
   for (let t = 0; t < turns; t++) seq[t] = futureDealIn(Math.max(0, wall - 4 * (t + 1)), threatsVisible).rate
+  return seq
+}
+
+function damaFactorSeq(wall: number, open: boolean, riichiThreats: number): Float64Array {
+  const turns = Math.floor(wall / 4)
+  const seq = new Float64Array(turns)
+  for (let t = 0; t < turns; t++) seq[t] = damaHazardFactor(Math.max(0, wall - 4 * t), open, riichiThreats)
   return seq
 }
 

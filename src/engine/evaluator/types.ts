@@ -6,7 +6,7 @@ import type { Action, Seat } from '../game/types'
 import type { PlayerView } from '../game/view'
 import type { TileKind } from '../rules/tile'
 
-export const EVALUATOR_VERSION = 'evaluator-0.5.0'
+export const EVALUATOR_VERSION = 'evaluator-0.5.1'
 
 /** full = Mac 向け高精度、light = iPhone 向け軽量（試行回数だけが違い、ロジックは共通） */
 export type EvaluationMode = 'full' | 'light'

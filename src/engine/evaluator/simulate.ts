@@ -25,7 +25,7 @@
  * - 門前で聴牌したら立直（立直後はツモ切り）。ただし打牌時点で聴牌の候補は、その候補の立直・ダマのまま進める
  */
 
-import { drawPayment, riichiBonusRate, ronRate } from '../calibration/calibration'
+import { damaRonRate, drawPayment, riichiBonusRate, ronRate } from '../calibration/calibration'
 import { createRng } from '../game/wall'
 import type { PlayerView } from '../game/view'
 import { waitingKinds } from '../rules/agari'
@@ -61,6 +61,8 @@ export interface SimSetup {
   otherEndHazardSelfRiichi: Float64Array
   /** 他家の和了で局が終わったときの平均失点（他家のツモの支払い。実測） */
   otherWinLoss: number
+  /** 自分が立直せずに聴牌しているとき、otherEndHazard に掛ける倍率（[門前, 仕掛け]、自分の t 回目のツモまで） */
+  damaHazardFactor: [Float64Array, Float64Array]
   hasThreat: boolean
   /** 自分の t 回目のツモ後の打牌で、今は見えていない脅威（この先の立直・ダマ聴牌）に放銃する確率 */
   futureDealIn: Float64Array
@@ -106,6 +108,8 @@ export interface SimOutcome {
 const RIICHI_STICK = 1000
 // 以下の定数は AI 同士の大量対局で実測した値（calibration.json。無ければ経験則の既定値）
 const RON_RATE_DAMA = ronRate(false)
+const RON_RATE_DAMA_CLOSED = damaRonRate(false)
+const RON_RATE_DAMA_OPEN = damaRonRate(true)
 const RON_RATE_RIICHI = ronRate(true)
 const TENPAI_BONUS = drawPayment(true)
 const NOTEN_PENALTY = -drawPayment(false)
@@ -324,7 +328,10 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
       let called = false
       for (let j = 0; j < others && idx < m; j++) {
         // 他家の和了で局が終わる（ツモなら支払う）
-        const h = riichi ? setup.otherEndHazardSelfRiichi[t] : setup.otherEndHazard[t]
+        // 立直せずに聴牌しているときは、自分が先に和了る分だけ他家の和了が減る（実測の倍率）
+        const h = riichi
+          ? setup.otherEndHazardSelfRiichi[t]
+          : setup.otherEndHazard[t] * (shanten === 0 ? (setup.damaHazardFactor[menzen ? 0 : 1][t] ?? 1) : 1)
         outcome -= alive * h * setup.otherWinLoss
         alive *= 1 - h
         calm *= 1 - (setup.riichiAppear[t] ?? 0)
@@ -335,7 +342,7 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
           if (fastShanten(c, meldCount) === -1 && !isFuriten(c, tile, furiten, meldCount)) {
             const v = winValue(setup, cand, melds, menzen, c, tile, false, riichi)
             if (v > 0) {
-              const p = alive * (riichi ? RON_RATE_RIICHI : RON_RATE_DAMA)
+              const p = alive * (riichi ? RON_RATE_RIICHI : menzen ? RON_RATE_DAMA_CLOSED : RON_RATE_DAMA_OPEN)
               outcome += p * v
               won += p
               wonPoints += p * v

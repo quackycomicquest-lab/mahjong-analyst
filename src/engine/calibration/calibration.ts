@@ -50,6 +50,12 @@ export interface CalibrationData {
    * byRiichi[自分以外の立直者数 0,1,2+][自分が子 0／親 1]（bench/calibrate-otherwin.ts）
    */
   otherWinLoss?: { byRiichi: number[][]; n?: number[][]; games?: number }
+  /**
+   * 立直していない聴牌のときの実測（bench/calibrate-dama.ts）。
+   * hazardByWall[門前0／仕掛け1][山の残り÷10][自分以外の立直者 0,1,2+]：他家の打牌1回あたり、他家の和了で局が終わる確率
+   * ronRate[門前0／仕掛け1]：当たり牌が切られる割合
+   */
+  damaTenpai?: { hazardByWall: number[][][]; hazardN?: number[][][]; ronRate: number[]; ronN?: number[]; games?: number }
 }
 
 /** 検証用：環境変数 MAHJONG_NO_CALIBRATION=1 なら実測値を使わず既定値だけで動かす（Node 実行時のみ） */
@@ -173,3 +179,26 @@ export function otherWinLoss(riichiThreats: number, dealer: boolean): number {
   const base = [850, 1050, 1000][k]
   return dealer ? base * 1.5 : base
 }
+
+/**
+ * 自分が立直せずに聴牌しているとき、他家の和了で局が終わる確率を何倍にするか（全局面の平均 hazard に対する比）。
+ * 自分が先に和了る分だけ他家の和了は減る。サンプルの少ない山の帯は 1 倍
+ */
+export function damaHazardFactor(wall: number, open: boolean, riichiThreats: number): number {
+  const d = CALIBRATION.damaTenpai
+  const h = CALIBRATION.hazard
+  if (!d || !h || !Array.isArray(d.hazardByWall[0][0])) return 1
+  const b = Math.max(0, Math.min(d.hazardByWall[0].length - 1, Math.floor(wall / 10)))
+  const k = Math.min(riichiThreats, 2)
+  const n = d.hazardN?.[open ? 1 : 0][b][k] ?? Infinity
+  const base = h.byWall[b][k]
+  if (n < 2000 || base <= 0) return 1
+  return Math.max(0.3, Math.min(1.5, d.hazardByWall[open ? 1 : 0][b][k] / base))
+}
+
+/** 立直していない聴牌で、当たり牌が切られる割合（門前・仕掛け別。実測がなければダマ全体の値） */
+export function damaRonRate(open: boolean): number {
+  const d = CALIBRATION.damaTenpai
+  return d ? d.ronRate[open ? 1 : 0] : ronRate(false)
+}
+
