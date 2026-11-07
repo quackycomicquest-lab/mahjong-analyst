@@ -5,6 +5,8 @@
  *
  * 再評価は試行回数を増やし（1回 1,200 試行）、乱数を変えて 3 回行う。
  * 書き出した JSON は bench/verify-flags.ts でさらに詳しく調べられる（局面・行動・評価をすべて含む）。
+ * 「Mac へ送る」は共有シート（iPhone）で iCloud Drive の MahjongAnalyst フォルダに保存してもらう。
+ * Mac ではそのフォルダの最新のファイルを bench/flags-inbox.ts が読み、新しく印をつけた判断だけを分析する（docs/flags-workflow.md）。
  */
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -47,6 +49,11 @@ function target(it: Item): Pick<StoredEvaluation, 'action' | 'label' | 'evaluati
 }
 
 const REASON_LABEL = new Map(FLAG_REASONS)
+/** ファイル名用の日時（例：2026-11-07-1530） */
+const stamp = (d: Date) => {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
+}
 const formatDate = (iso: string) => new Date(iso).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric' })
 
 export function FlagsSection({ games }: { games: GameRecord[] }) {
@@ -54,6 +61,7 @@ export function FlagsSection({ games }: { games: GameRecord[] }) {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [openKey, setOpenKey] = useState<string | null>(null)
+  const [sent, setSent] = useState<string | null>(null)
   const [level, setLevel] = useState<1 | 2 | 3>(1)
 
   useEffect(() => {
@@ -125,21 +133,37 @@ export function FlagsSection({ games }: { games: GameRecord[] }) {
     setProgress(null)
   }
 
-  /** 局面・行動・評価・印をまとめて JSON で書き出す（bench/verify-flags.ts で読める） */
-  const exportJson = () => {
+  /**
+   * 局面・行動・評価・印をまとめた JSON（bench/verify-flags.ts・bench/flags-inbox.ts で読める）を、
+   * 共有シートで送る（iPhone：「"ファイル"に保存」で iCloud Drive へ）。共有できないブラウザ（Mac など）はダウンロードする
+   */
+  const sendJson = async () => {
     const data = {
       kind: 'mahjong-analyst/flags',
       exportedAt: new Date().toISOString(),
       engineVersion: EVALUATOR_VERSION,
       items: items.filter((i) => i.record).map((i) => ({ flag: i.flag, record: i.record })),
     }
-    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
+    const json = JSON.stringify(data)
+    const name = `mahjong-flags-${stamp(new Date())}.json`
+    const file = new File([json], name, { type: 'application/json' })
+    setSent(null)
+    if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: '要検証の判断' })
+        setSent(`${name} を送りました`)
+      } catch (e) {
+        if ((e as Error).name !== 'AbortError') setSent(`送れませんでした（${(e as Error).message}）`)
+      }
+      return
+    }
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `mahjong-flags-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = name
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
+    setSent(`${name} をダウンロードしました`)
   }
 
   const pending = items.filter((i) => i.record && i.flag.verification?.engineVersion !== EVALUATOR_VERSION).length
@@ -158,11 +182,17 @@ export function FlagsSection({ games }: { games: GameRecord[] }) {
           >
             {progress ? `再評価中 ${progress.done}/${progress.total}` : `まとめて再評価（${pending}件）`}
           </button>
-          <button type="button" className="btn btn--ghost btn--small" disabled={items.length === 0} onClick={exportJson}>
-            書き出す（JSON）
+          <button type="button" className="btn btn--ghost btn--small" disabled={items.length === 0} onClick={sendJson}>
+            Mac へ送る（JSON）
           </button>
         </div>
       </div>
+      {items.length > 0 && (
+        <p className="muted small flags__send-hint">
+          「Mac へ送る」→「"ファイル"に保存」→ iCloud Drive の <b>MahjongAnalyst</b> フォルダに保存すると、Mac で「要検証を反映して」と頼むだけで分析・反映できます。
+          {sent && <span className="flags__sent">　{sent}</span>}
+        </p>
+      )}
       {items.length === 0 ? (
         <p className="muted">
           対局履歴の振り返りで、評価に納得できない判断に「⚑ 要検証」の印をつけると、ここにまとまります。

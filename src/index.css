@@ -2786,3 +2786,9 @@ html.phone-land .problem__name {
 .after-hand__waits .tile--mini {
   --tw: 18px;
 }
+.flags__send-hint {
+  margin: 0;
+}
+.flags__sent {
+  color: var(--accent);
+}

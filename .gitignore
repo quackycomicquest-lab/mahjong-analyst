@@ -32,3 +32,6 @@ asset/
 
 # 補正用の生データ（npm run calibrate で再生成）
 calibration-raw/
+
+# 個人の対局データ・他サイトの問題データなど（git に入れない。docs/flags-workflow.md）
+local-data/
