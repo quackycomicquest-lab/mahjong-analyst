@@ -218,6 +218,20 @@ describe('鳴き・和了・九種九牌・立直判断の評価', () => {
     expect(e.score!).toBeGreaterThanOrEqual(75)
   })
 
+  it('先制立直に対して、両面聴牌なら無スジを押して聴牌を保つ（他家のツモの支払いも収支に入れる）', () => {
+    // 234萬 99萬 678筒 345索 56索 で 47索待ち。ツモった4萬は無スジだが、現物の9萬を切ると聴牌を崩す
+    const view = makeView({
+      hand: '23499m678p34556s4m',
+      riichiAllowed: true,
+      wallRemaining: 40,
+      rivers: { 2: ['1z', '9m', '2p', '5s*'] },
+    })
+    // 押しと降りの差は 100 点ほどなので、試行を増やして比べる
+    const e = evaluateDecision(view, discard(view, '9m'), { ...opts, simulations: 1500 })
+    expect(e.best!.shanten).toBe(0)
+    expect(e.score!).toBeLessThan(100) // 降りは最善ではない（差は小さいので減点も小さい）
+  })
+
   it('役牌の対子をポンする判断を評価できる（鳴いた後の打牌まで含めて比較）', () => {
     const view = makeView({ hand: '55z234m57p13s689s9m', response: { from: 3, tile: '5z', actions: ponOf } })
     const pon = view.legalActions.find((a) => a.type === 'pon')!

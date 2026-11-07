@@ -17,7 +17,13 @@
  */
 
 import { findThreats, seenCounts, tileDanger } from '../ai/danger'
-import { dealInLoss as dealInLossFor, futureDealIn, otherEndHazard, riichiAppearRate } from '../calibration/calibration'
+import {
+  dealInLoss as dealInLossFor,
+  futureDealIn,
+  otherEndHazard,
+  otherWinLoss,
+  riichiAppearRate,
+} from '../calibration/calibration'
 import { chiForbidden } from '../game/game'
 import type { Action, CalledMeld, Seat } from '../game/types'
 import type { PlayerView } from '../game/view'
@@ -617,6 +623,7 @@ export function buildSetup(view: PlayerView): SimSetup {
     // 他家の打牌1回あたりに、自分以外の和了で局が終わる確率（山の残り枚数ごとの実測値）
     otherEndHazard: hazardSeq(view.wallRemaining, riichiThreats, openThreats, false),
     otherEndHazardSelfRiichi: hazardSeq(view.wallRemaining, riichiThreats, openThreats, true),
+    otherWinLoss: otherWinLoss(riichiThreats, view.seat === view.round.dealer),
     hasThreat: threats.length > 0,
     riichiDealInProb,
     riichiVisible: riichiThreats > 0,

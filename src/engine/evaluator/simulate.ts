@@ -7,7 +7,8 @@
  *
  * 分散を減らす工夫:
  * - 全候補で同じ乱数列（同じツモ順）を使い、候補間の差を比べやすくする
- * - 放銃と他家の和了は抽選せず「生き残り確率」を掛けていく（期待値で計算）
+ * - 放銃と他家の和了は抽選せず「生き残り確率」を掛けていく（期待値で計算）。他家の和了で終わる分には、
+ *   実測した平均失点（他家のツモの支払い）を掛ける（降りて局が長引くほど、他家のツモで払う見込みが増える）
  *
  * 自分の打ち方（シミュレーション内の方針）:
  * - 有効牌を引いたら向聴数が最も進む打牌。その中で受け入れ（聴牌なら待ちの残り枚数）が最も多いものを選ぶ
@@ -58,6 +59,8 @@ export interface SimSetup {
   otherEndHazard: Float64Array
   /** 同上（自分が立直しているとき。他家が守りに回るので下がる） */
   otherEndHazardSelfRiichi: Float64Array
+  /** 他家の和了で局が終わったときの平均失点（他家のツモの支払い。実測） */
+  otherWinLoss: number
   hasThreat: boolean
   /** 自分の t 回目のツモ後の打牌で、今は見えていない脅威（この先の立直・ダマ聴牌）に放銃する確率 */
   futureDealIn: Float64Array
@@ -320,7 +323,10 @@ export function simulateCandidate(setup: SimSetup, cand: SimCandidate, n: number
       const others = t === 0 && cand.drawFirst ? 0 : 3
       let called = false
       for (let j = 0; j < others && idx < m; j++) {
-        alive *= 1 - (riichi ? setup.otherEndHazardSelfRiichi[t] : setup.otherEndHazard[t])
+        // 他家の和了で局が終わる（ツモなら支払う）
+        const h = riichi ? setup.otherEndHazardSelfRiichi[t] : setup.otherEndHazard[t]
+        outcome -= alive * h * setup.otherWinLoss
+        alive *= 1 - h
         calm *= 1 - (setup.riichiAppear[t] ?? 0)
         const tile = pool[idx++]
         // 聴牌していればロンの機会

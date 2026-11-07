@@ -45,6 +45,11 @@ export interface CalibrationData {
   discardDealIn?: { all: number[]; unseen: number[]; loss: number }
   /** 他家の立直者がいないとき、他家の打牌1回あたりにそれが立直宣言である割合 [山の残り枚数÷10]（bench/calibrate-riichi.ts） */
   riichiAppear?: { byWall: number[]; n?: number[]; games?: number }
+  /**
+   * 他家の和了で局が終わったときの自分の平均失点（他家のツモの支払い。他家どうしのロンは 0）。
+   * byRiichi[自分以外の立直者数 0,1,2+][自分が子 0／親 1]（bench/calibrate-otherwin.ts）
+   */
+  otherWinLoss?: { byRiichi: number[][]; n?: number[][]; games?: number }
 }
 
 /** 検証用：環境変数 MAHJONG_NO_CALIBRATION=1 なら実測値を使わず既定値だけで動かす（Node 実行時のみ） */
@@ -158,4 +163,13 @@ export function riichiAppearRate(wall: number): number {
   const r = CALIBRATION.riichiAppear
   if (r) return r.byWall[Math.max(0, Math.min(r.byWall.length - 1, Math.floor(wall / 10)))]
   return wall >= 20 ? 0.03 : 0.01
+}
+
+/** 他家の和了で局が終わったときの自分の平均失点（点、正の値） */
+export function otherWinLoss(riichiThreats: number, dealer: boolean): number {
+  const t = CALIBRATION.otherWinLoss
+  const k = Math.min(riichiThreats, 2)
+  if (t) return t.byRiichi[k][dealer ? 1 : 0]
+  const base = [850, 1050, 1000][k]
+  return dealer ? base * 1.5 : base
 }

@@ -47,6 +47,7 @@ npx tsx bench/verify-flags.ts local-data/flags-inbox/pending.json 2000
   - 何切る問題との照合（データがあれば）：`npx tsx local-data/nnkr/compare.mts 1000 1` と `... 1000 7`。
     local-data/nnkr/baseline-*.json（前のエンジンの結果）と比べ、多数派との一致・70点未満の数が悪くなっていないか見る。
     悪くなった問題は原因を調べる（直したことの副作用なら直し方を変える）。良ければ result-*.json を baseline-*.json に置き換える
+  - `npx tsx bench/strategy-check.ts 1000`（定石との照合）で、11 件が合格のままか確かめる
   - `npm run eval-timing` で処理時間を確かめる
 - pending.json をもう一度 verify-flags で評価し、直した判断の点数が妥当になったか確かめる。
 

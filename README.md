@@ -28,6 +28,7 @@ npm run dev
 | `npm run calibrate` | AI 同士の大量対局で評価の定数を実測（`GAMES=1000` で 8,000 半荘） |
 | `npm run validate -- 40` | 評価の予測と実際の結果の比較 |
 | `npx tsx bench/verify-flags.ts <JSON>` | アプリで書き出した「要検証」の判断を詳しく再評価 |
+| `npx tsx bench/strategy-check.ts` | 自作の局面で、評価エンジンが定石・統計どおりの判断をするか照合（[strategy-check.md](docs/strategy-check.md)） |
 | `npx tsx bench/flags-inbox.ts` | iCloud Drive の MahjongAnalyst に送った要検証のうち、未分析の判断を取り出す（[flags-workflow.md](docs/flags-workflow.md)） |
 | `npm run golden:shanten` / `npm run golden:score` | 正解データの再生成（Python `mahjong` を使用、要 uv） |
 
@@ -38,7 +39,7 @@ npm run dev
 | `src/engine/rules/` | ① ルールエンジン（牌・シャンテン数・和了判定・点数計算） | [phase0-engine-evaluation.md](docs/phase0-engine-evaluation.md) |
 | `src/engine/game/` | 対局進行（配牌〜終局、プレイヤー視点） | [SPEC.md §2-1](docs/SPEC.md) |
 | `src/engine/ai/` | ② AIプレイヤー（性格×強さ） | [ai-player.md](docs/ai-player.md) |
-| `src/engine/evaluator/` | ③ 判断評価エンジン（打牌・鳴き・和了・カン・九種九牌） | [evaluator.md](docs/evaluator.md)・[nnkr-comparison.md](docs/nnkr-comparison.md)（何切る問題との照合）・[flags-review.md](docs/flags-review.md)（要検証の判断の再評価） |
+| `src/engine/evaluator/` | ③ 判断評価エンジン（打牌・鳴き・和了・カン・九種九牌） | [evaluator.md](docs/evaluator.md)・[nnkr-comparison.md](docs/nnkr-comparison.md)（何切る問題との照合）・[flags-review.md](docs/flags-review.md)（要検証の判断の再評価）・[strategy-check.md](docs/strategy-check.md)（定石との照合） |
 | `src/engine/calibration/` | 評価・AI の定数（AI 同士の 8,000 半荘で実測） | [calibration.md](docs/calibration.md) |
 | `src/engine/coach/` | ④ 弱点分析・復習問題（判断の分類、5 つの能力値、出題間隔） | [coach.md](docs/coach.md) |
 | `src/ui/` `src/workers/` | 対局画面・評価パネル・履歴・評価 Web Worker | 下記 |
